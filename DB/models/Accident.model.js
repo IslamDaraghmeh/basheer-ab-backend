@@ -74,7 +74,7 @@ accidentSchema.pre('save', async function(next) {
 });
 
 // Index for faster queries
-accidentSchema.index({ ticketNumber: 1 });
+// Note: ticketNumber already has unique index from schema definition
 accidentSchema.index({ status: 1 });
 accidentSchema.index({ insured: 1, vehicleId: 1 });
 
