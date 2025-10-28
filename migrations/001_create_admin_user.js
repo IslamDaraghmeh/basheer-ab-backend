@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
+import { userModel } from "../DB/models/User.model.js";
 
 dotenv.config();
 
@@ -31,11 +32,8 @@ async function up() {
     await mongoose.connect(dbUri);
     console.log("✅ Connected to database");
 
-    // Get User model
-    const User = mongoose.model("user");
-
     // Check if admin already exists
-    const existingAdmin = await User.findOne({
+    const existingAdmin = await userModel.findOne({
       $or: [{ email: ADMIN_USER.email }, { role: "admin" }],
     });
 
@@ -51,7 +49,7 @@ async function up() {
     const hashedPassword = await bcrypt.hash(ADMIN_USER.password, saltRounds);
 
     // Create admin user
-    const adminUser = await User.create({
+    const adminUser = await userModel.create({
       name: ADMIN_USER.name,
       email: ADMIN_USER.email,
       password: hashedPassword,
@@ -85,11 +83,8 @@ async function down() {
     await mongoose.connect(dbUri);
     console.log("✅ Connected to database");
 
-    // Get User model
-    const User = mongoose.model("user");
-
     // Remove admin user
-    const result = await User.deleteOne({ email: ADMIN_USER.email });
+    const result = await userModel.deleteOne({ email: ADMIN_USER.email });
 
     if (result.deletedCount > 0) {
       console.log("✅ Admin user removed successfully");
