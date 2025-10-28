@@ -1,5 +1,5 @@
 import { insuredModel } from "../../../../DB/models/Insured.model.js";
-import { userModel } from "../../../../DB/models/user.model.js";
+import { userModel } from "../../../../DB/models/User.model.js";
 import InsuranceCompany from "../../../../DB/models/insuranceCompany.model.js";
 import { InsuranceTypeModel } from "../../../../DB/models/InsuranceType.model.js";
 import { ExpenseModel } from "../../../../DB/models/Expense.model.js";

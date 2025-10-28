@@ -1,5 +1,5 @@
-import notificationModel from "../../../../DB/models/notification.model.js";
-import { userModel } from "../../../../DB/models/user.model.js";
+import notificationModel from "../../../../DB/models/Notification.model.js";
+import { userModel } from "../../../../DB/models/User.model.js";
 import { io, onlineUsers } from "../../../../index.js";
 import mongoose from 'mongoose';
 import { getPaginationParams, buildPaginatedResponse } from "../../../utils/pagination.js";

@@ -1,5 +1,5 @@
 // Controllers/call.controller.js
-import CallModel from "../../../../DB/models/call.model.js";
+import CallModel from "../../../../DB/models/Call.model.js";
 import { getRecordingPath } from "../../../services/recording.service.js";
 
 export const getCallRecording = async (req, res) => {

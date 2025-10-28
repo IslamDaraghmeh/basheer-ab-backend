@@ -1,4 +1,4 @@
-import { userModel } from "../../../../DB/models/user.model.js";
+import { userModel } from "../../../../DB/models/User.model.js";
 import bcrypt from 'bcryptjs'
 
 import AuditLogModel from "../../../../DB/models/AuditLog.model.js";

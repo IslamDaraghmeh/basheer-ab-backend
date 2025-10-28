@@ -2,7 +2,7 @@ import { accidentModel } from "../../../../DB/models/Accident.model.js";
 import { AccidentCommentModel } from "../../../../DB/models/AccidentComment.model.js";
 import cloudinary from "../../../services/cloudinary.js";
 import { insuredModel } from '../../../../DB/models/Insured.model.js';
-import { userModel } from "../../../../DB/models/user.model.js";
+import { userModel } from "../../../../DB/models/User.model.js";
 import AuditLogModel from "../../../../DB/models/AuditLog.model.js";
 import { sendNotificationLogic } from "../../notification/controller/notification.controller.js";
 

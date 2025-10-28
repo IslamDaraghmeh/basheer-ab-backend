@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { userModel } from "../../DB/models/user.model.js";
+import { userModel } from "../../DB/models/User.model.js";
 import logger from "../utils/logService.js";
 
 export const auth = (acessRole = []) => {

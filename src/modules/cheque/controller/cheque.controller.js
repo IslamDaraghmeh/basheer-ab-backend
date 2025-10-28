@@ -1,6 +1,6 @@
 import ChequeModel from "../../../../DB/models/Cheque.model.js";
 import { insuredModel } from "../../../../DB/models/Insured.model.js";
-import { userModel } from "../../../../DB/models/user.model.js";
+import { userModel } from "../../../../DB/models/User.model.js";
 import cloudinary from "../../../services/cloudinary.js";
 import logger from "../../../utils/logService.js";
 import { getPaginationParams, buildPaginatedResponse } from "../../../utils/pagination.js";

@@ -1,7 +1,7 @@
 import { RoadServiceModel } from "../../../../DB/models/RoadService.model.js";
 import InsuranceCompany from "../../../../DB/models/insuranceCompany.model.js";
 import AuditLogModel from "../../../../DB/models/AuditLog.model.js";
-import { userModel } from "../../../../DB/models/user.model.js";
+import { userModel } from "../../../../DB/models/User.model.js";
 import { sendNotificationLogic } from "../../notification/controller/notification.controller.js";
 import logger from "../../../utils/logService.js";
 import { getPaginationParams, buildPaginatedResponse } from "../../../utils/pagination.js";

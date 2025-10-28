@@ -1,7 +1,7 @@
 import { InsuranceTypeModel } from "../../../../DB/models/InsuranceType.model.js";
 import PricingTypeModel from "../../../../DB/models/PricingType.model.js";
 import AuditLogModel from "../../../../DB/models/AuditLog.model.js";
-import { userModel } from "../../../../DB/models/user.model.js";
+import { userModel } from "../../../../DB/models/User.model.js";
 import { sendNotificationLogic } from "../../notification/controller/notification.controller.js";
 
 const logAudit = async ({ userId, action, entity, entityId, userName, oldValue = null, newValue = null }) => {
