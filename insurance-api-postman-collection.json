@@ -1,0 +1,2666 @@
+{
+  "info": {
+    "name": "Insurance Management API",
+    "description": "Comprehensive API collection for Insurance Management System - includes user management, insurance companies, insured customers, accident reports, financial reports, and more.",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Create Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"admin\",\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/add",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "add"
+              ]
+            },
+            "description": "Creates a default admin user for the system"
+          }
+        },
+        {
+          "name": "Sign In",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.token) {",
+                  "        pm.environment.set('token', response.token);",
+                  "        pm.collectionVariables.set('token', response.token);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/signin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "signin"
+              ]
+            },
+            "description": "Authenticate user and get JWT token"
+          }
+        },
+        {
+          "name": "Send Reset Code",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/sendcode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "sendcode"
+              ]
+            },
+            "description": "Send password reset code via email"
+          }
+        },
+        {
+          "name": "Forget Password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"code\": \"reset_code_here\",\n  \"newPassword\": \"newPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/forgetpassword",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "forgetpassword"
+              ]
+            },
+            "description": "Reset password using code received via email"
+          }
+        }
+      ],
+      "description": "Authentication and password management endpoints"
+    },
+    {
+      "name": "User Management",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "profile"
+              ]
+            },
+            "description": "Get current user profile information"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"currentPassword123\",\n  \"newPassword\": \"newPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/changepassword",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "changepassword"
+              ]
+            },
+            "description": "Change current user password"
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"email\": \"updated@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/change",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "change"
+              ]
+            },
+            "description": "Update user profile information"
+          }
+        },
+        {
+          "name": "Add Head of Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Department Head\",\n  \"email\": \"head@department.com\",\n  \"password\": \"password123\",\n  \"status\": \"نشط\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/addHeadOfEmployeeToDepartment/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "addHeadOfEmployeeToDepartment",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "department_id_here"
+                }
+              ]
+            },
+            "description": "Add head of employee to a specific department"
+          }
+        },
+        {
+          "name": "Delete Head of Department",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/deleteHeadOfEmployeeFromDepartment/:depId/:userId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "deleteHeadOfEmployeeFromDepartment",
+                ":depId",
+                ":userId"
+              ],
+              "variable": [
+                {
+                  "key": "depId",
+                  "value": "department_id_here"
+                },
+                {
+                  "key": "userId",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Remove head of employee from department"
+          }
+        },
+        {
+          "name": "Get Head of Department",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/getHeadOfEmployee/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "getHeadOfEmployee",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "department_id_here"
+                }
+              ]
+            },
+            "description": "Get head of employee for a specific department"
+          }
+        },
+        {
+          "name": "Add Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Employee Name\",\n  \"email\": \"employee@department.com\",\n  \"password\": \"password123\",\n  \"status\": \"نشط\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/addEmployee/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "addEmployee",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "department_id_here"
+                }
+              ]
+            },
+            "description": "Add employee to a specific department"
+          }
+        },
+        {
+          "name": "Delete Employee",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/deleteEmployee/:depId/:employeeId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "deleteEmployee",
+                ":depId",
+                ":employeeId"
+              ],
+              "variable": [
+                {
+                  "key": "depId",
+                  "value": "department_id_here"
+                },
+                {
+                  "key": "employeeId",
+                  "value": "employee_id_here"
+                }
+              ]
+            },
+            "description": "Remove employee from department"
+          }
+        },
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/allEmployee/:depId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "allEmployee",
+                ":depId"
+              ],
+              "variable": [
+                {
+                  "key": "depId",
+                  "value": "department_id_here"
+                }
+              ]
+            },
+            "description": "Get all employees in a specific department"
+          }
+        }
+      ],
+      "description": "User management and employee administration endpoints"
+    },
+    {
+      "name": "Department Management",
+      "item": [
+        {
+          "name": "Add Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Insurance Department\",\n  \"description\": \"Handles all insurance-related operations\",\n  \"permissions\": [\"read\", \"write\", \"delete\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/department/add",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "department",
+                "add"
+              ]
+            },
+            "description": "Create a new department"
+          }
+        },
+        {
+          "name": "Get All Departments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/department/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "department",
+                "all"
+              ]
+            },
+            "description": "Get all departments in the system"
+          }
+        },
+        {
+          "name": "Get Department by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/department/dep/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "department",
+                "dep",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "department_id_here"
+                }
+              ]
+            },
+            "description": "Get specific department by ID"
+          }
+        },
+        {
+          "name": "Update Department",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Department Name\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/department/update/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "department",
+                "update",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "department_id_here"
+                }
+              ]
+            },
+            "description": "Update department information"
+          }
+        },
+        {
+          "name": "Delete Department",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/department/delete/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "department",
+                "delete",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "department_id_here"
+                }
+              ]
+            },
+            "description": "Delete a department"
+          }
+        }
+      ],
+      "description": "Department management endpoints"
+    },
+    {
+      "name": "Insurance Companies",
+      "item": [
+        {
+          "name": "Add Insurance Company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Takaful Insurance\",\n  \"address\": \"Ramallah, Palestine\",\n  \"phone\": \"+970-2-555-0123\",\n  \"email\": \"contact@takaful.ps\",\n  \"website\": \"https://takaful.ps\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/addInsuranceCompany",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "addInsuranceCompany"
+              ]
+            },
+            "description": "Add a new insurance company"
+          }
+        },
+        {
+          "name": "Get All Insurance Companies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "all"
+              ]
+            },
+            "description": "Get all insurance companies"
+          }
+        },
+        {
+          "name": "Update Insurance Company",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Company Name\",\n  \"address\": \"Updated Address\",\n  \"phone\": \"+970-2-555-9999\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/updateInsuranceCompany/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "updateInsuranceCompany",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "company_id_here"
+                }
+              ]
+            },
+            "description": "Update insurance company information"
+          }
+        },
+        {
+          "name": "Delete Insurance Company",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/delete/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "delete",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "company_id_here"
+                }
+              ]
+            },
+            "description": "Delete an insurance company"
+          }
+        }
+      ],
+      "description": "Insurance company management endpoints"
+    },
+    {
+      "name": "Insured Management",
+      "item": [
+        {
+          "name": "Add Insured Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "first_name",
+                  "value": "Ahmad",
+                  "type": "text"
+                },
+                {
+                  "key": "last_name",
+                  "value": "Mohammed",
+                  "type": "text"
+                },
+                {
+                  "key": "id_Number",
+                  "value": "123456789",
+                  "type": "text"
+                },
+                {
+                  "key": "phone_number",
+                  "value": "+970-59-555-0123",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "ahmad@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "city",
+                  "value": "Ramallah",
+                  "type": "text"
+                },
+                {
+                  "key": "joining_date",
+                  "value": "2024-01-15",
+                  "type": "text"
+                },
+                {
+                  "key": "birth_date",
+                  "value": "1985-05-20",
+                  "type": "text"
+                },
+                {
+                  "key": "agentsName",
+                  "value": "Agent Name",
+                  "type": "text"
+                },
+                {
+                  "key": "notes",
+                  "value": "Regular customer",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/addInsured",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "addInsured"
+              ]
+            },
+            "description": "Add a new insured customer with image upload"
+          }
+        },
+        {
+          "name": "Get All Insured",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/allInsured",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "allInsured"
+              ]
+            },
+            "description": "Get all insured customers"
+          }
+        },
+        {
+          "name": "Get Insured by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/findInsured/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "findInsured",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "insured_id_here"
+                }
+              ]
+            },
+            "description": "Get specific insured customer by ID"
+          }
+        },
+        {
+          "name": "Update Insured",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "first_name",
+                  "value": "Updated Name",
+                  "type": "text"
+                },
+                {
+                  "key": "phone_number",
+                  "value": "+970-59-555-9999",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/updateInsured/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "updateInsured",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "insured_id_here"
+                }
+              ]
+            },
+            "description": "Update insured customer information"
+          }
+        },
+        {
+          "name": "Delete Insured",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/deleteInsured/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "deleteInsured",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "insured_id_here"
+                }
+              ]
+            },
+            "description": "Delete an insured customer"
+          }
+        },
+        {
+          "name": "Add Vehicle to Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "plateNumber",
+                  "value": "12-345-67",
+                  "type": "text"
+                },
+                {
+                  "key": "model",
+                  "value": "Toyota Camry",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "سيدان",
+                  "type": "text"
+                },
+                {
+                  "key": "ownership",
+                  "value": "ملكية خاصة",
+                  "type": "text"
+                },
+                {
+                  "key": "modelNumber",
+                  "value": "2020",
+                  "type": "text"
+                },
+                {
+                  "key": "color",
+                  "value": "أبيض",
+                  "type": "text"
+                },
+                {
+                  "key": "price",
+                  "value": "15000",
+                  "type": "text"
+                },
+                {
+                  "key": "licenseExpiry",
+                  "value": "2025-12-31",
+                  "type": "text"
+                },
+                {
+                  "key": "lastTest",
+                  "value": "2024-01-15",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/addCar/:insuredId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "addCar",
+                ":insuredId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                }
+              ]
+            },
+            "description": "Add a vehicle to an insured customer"
+          }
+        },
+        {
+          "name": "Get Customer Vehicles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/allVec/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "allVec",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "insured_id_here"
+                }
+              ]
+            },
+            "description": "Get all vehicles for a specific customer"
+          }
+        },
+        {
+          "name": "Update Vehicle",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"Updated Model\",\n  \"color\": \"أزرق\",\n  \"price\": \"16000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/updatevic/:insuredId/:vehicleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "updatevic",
+                ":insuredId",
+                ":vehicleId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                },
+                {
+                  "key": "vehicleId",
+                  "value": "vehicle_id_here"
+                }
+              ]
+            },
+            "description": "Update vehicle information"
+          }
+        },
+        {
+          "name": "Remove Vehicle",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/del/:insuredId/:vehicleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "del",
+                ":insuredId",
+                ":vehicleId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                },
+                {
+                  "key": "vehicleId",
+                  "value": "vehicle_id_here"
+                }
+              ]
+            },
+            "description": "Remove a vehicle from customer"
+          }
+        },
+        {
+          "name": "Add Insurance to Vehicle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "insuranceCompany",
+                  "value": "Takaful",
+                  "type": "text"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01",
+                  "type": "text"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31",
+                  "type": "text"
+                },
+                {
+                  "key": "premium",
+                  "value": "1200",
+                  "type": "text"
+                },
+                {
+                  "key": "coverage",
+                  "value": "شامل",
+                  "type": "text"
+                },
+                {
+                  "key": "policyNumber",
+                  "value": "POL-2024-001",
+                  "type": "text"
+                },
+                {
+                  "key": "insuranceFiles",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/addInsurance/:insuredId/:vehicleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "addInsurance",
+                ":insuredId",
+                ":vehicleId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                },
+                {
+                  "key": "vehicleId",
+                  "value": "vehicle_id_here"
+                }
+              ]
+            },
+            "description": "Add insurance policy to a vehicle"
+          }
+        },
+        {
+          "name": "Get Vehicle Insurance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/get/:insuredId/:vehicleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "get",
+                ":insuredId",
+                ":vehicleId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                },
+                {
+                  "key": "vehicleId",
+                  "value": "vehicle_id_here"
+                }
+              ]
+            },
+            "description": "Get insurance policies for a specific vehicle"
+          }
+        },
+        {
+          "name": "Upload Customer Files",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/customers/:id/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "customers",
+                ":id",
+                "upload"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "customer_id_here"
+                }
+              ]
+            },
+            "description": "Upload multiple files for a customer"
+          }
+        }
+      ],
+      "description": "Insured customer and vehicle management endpoints"
+    },
+    {
+      "name": "Reports & Analytics",
+      "item": [
+        {
+          "name": "Get Total Insured Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/get_count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "get_count"
+              ]
+            },
+            "description": "Get total count of insured customers"
+          }
+        },
+        {
+          "name": "Get Insured by Month",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/getInsuredByMonth",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "getInsuredByMonth"
+              ]
+            },
+            "description": "Get insured customers breakdown by month"
+          }
+        },
+        {
+          "name": "Get Total Vehicles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/getTotalCar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "getTotalCar"
+              ]
+            },
+            "description": "Get total count of vehicles"
+          }
+        },
+        {
+          "name": "Get Active Insurance Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/getActiveInsurancesCount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "getActiveInsurancesCount"
+              ]
+            },
+            "description": "Get count of active insurance policies"
+          }
+        },
+        {
+          "name": "Get Expired Insurance Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/getExpiredInsurancesCount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "getExpiredInsurancesCount"
+              ]
+            },
+            "description": "Get count of expired insurance policies"
+          }
+        },
+        {
+          "name": "Get Total Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/getTotalPayments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "getTotalPayments"
+              ]
+            },
+            "description": "Get total payments amount"
+          }
+        },
+        {
+          "name": "Get Payments by Method",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/getPaymentsByMethod",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "getPaymentsByMethod"
+              ]
+            },
+            "description": "Get payments breakdown by payment method"
+          }
+        },
+        {
+          "name": "Get Customers Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/getCustomersReport",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "getCustomersReport"
+              ]
+            },
+            "description": "Get comprehensive customers report"
+          }
+        },
+        {
+          "name": "Get Vehicle Insurance Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/insured/getVehicleInsuranceReport",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "insured",
+                "getVehicleInsuranceReport"
+              ]
+            },
+            "description": "Get vehicle insurance comprehensive report"
+          }
+        }
+      ],
+      "description": "Reporting and analytics endpoints"
+    },
+    {
+      "name": "Accident Management",
+      "item": [
+        {
+          "name": "Add Accident",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "accidentDate",
+                  "value": "2024-01-15",
+                  "type": "text"
+                },
+                {
+                  "key": "location",
+                  "value": "Ramallah - Jerusalem Road",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Minor collision at intersection",
+                  "type": "text"
+                },
+                {
+                  "key": "damage",
+                  "value": "Front bumper damage",
+                  "type": "text"
+                },
+                {
+                  "key": "estimatedCost",
+                  "value": "500",
+                  "type": "text"
+                },
+                {
+                  "key": "status",
+                  "value": "تحت المراجعة",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accident/addAccident/:insuredId/:vehicleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accident",
+                "addAccident",
+                ":insuredId",
+                ":vehicleId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                },
+                {
+                  "key": "vehicleId",
+                  "value": "vehicle_id_here"
+                }
+              ]
+            },
+            "description": "Report an accident for a specific vehicle"
+          }
+        },
+        {
+          "name": "Get Accidents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accident/getAccident/:insuredId/:vehicleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accident",
+                "getAccident",
+                ":insuredId",
+                ":vehicleId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                },
+                {
+                  "key": "vehicleId",
+                  "value": "vehicle_id_here"
+                }
+              ]
+            },
+            "description": "Get all accidents for a specific vehicle"
+          }
+        },
+        {
+          "name": "Update Accident",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"مكتمل\",\n  \"estimatedCost\": \"750\",\n  \"description\": \"Updated accident description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accident/updateAccident/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accident",
+                "updateAccident",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "accident_id_here"
+                }
+              ]
+            },
+            "description": "Update accident information"
+          }
+        },
+        {
+          "name": "Delete Accident",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accident/deleteAccident/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accident",
+                "deleteAccident",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "accident_id_here"
+                }
+              ]
+            },
+            "description": "Delete an accident record"
+          }
+        },
+        {
+          "name": "Get Total Accidents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accident/totalAccidents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accident",
+                "totalAccidents"
+              ]
+            },
+            "description": "Get total count of accidents"
+          }
+        },
+        {
+          "name": "Get Accident Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accident/accidentReport",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accident",
+                "accidentReport"
+              ]
+            },
+            "description": "Get comprehensive accident report"
+          }
+        }
+      ],
+      "description": "Accident management and reporting endpoints"
+    },
+    {
+      "name": "Insurance Company Reports",
+      "item": [
+        {
+          "name": "Takaful Accident Report - Add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accidentDate\": \"2024-01-15\",\n  \"location\": \"Ramallah\",\n  \"description\": \"Vehicle accident details\",\n  \"damage\": \"Front damage\",\n  \"estimatedCost\": 1000,\n  \"driverName\": \"Ahmad Ali\",\n  \"policeReport\": \"PR-2024-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/TakafulAccidentReport/add/:plateNumber",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "TakafulAccidentReport",
+                "add",
+                ":plateNumber"
+              ],
+              "variable": [
+                {
+                  "key": "plateNumber",
+                  "value": "12-345-67"
+                }
+              ]
+            },
+            "description": "Add accident report for Takaful insurance"
+          }
+        },
+        {
+          "name": "Takaful Accident Report - Get All",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/TakafulAccidentReport/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "TakafulAccidentReport",
+                "all"
+              ]
+            },
+            "description": "Get all Takaful accident reports"
+          }
+        },
+        {
+          "name": "Trust Accident Report - Add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accidentDate\": \"2024-01-15\",\n  \"location\": \"Gaza\",\n  \"description\": \"Trust insurance accident\",\n  \"damage\": \"Side damage\",\n  \"estimatedCost\": 800\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/TrustAccidentReport/add/:plateNumber",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "TrustAccidentReport",
+                "add",
+                ":plateNumber"
+              ],
+              "variable": [
+                {
+                  "key": "plateNumber",
+                  "value": "12-345-67"
+                }
+              ]
+            },
+            "description": "Add accident report for Trust insurance"
+          }
+        },
+        {
+          "name": "Al-Ahlia Accident Report - Add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accidentDate\": \"2024-01-15\",\n  \"location\": \"Bethlehem\",\n  \"description\": \"Al-Ahlia insurance accident\",\n  \"damage\": \"Rear damage\",\n  \"estimatedCost\": 1200\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/AhliaAccidentReport/add/:plateNumber",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "AhliaAccidentReport",
+                "add",
+                ":plateNumber"
+              ],
+              "variable": [
+                {
+                  "key": "plateNumber",
+                  "value": "12-345-67"
+                }
+              ]
+            },
+            "description": "Add accident report for Al-Ahlia insurance"
+          }
+        },
+        {
+          "name": "Palestine Accident Report - Add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accidentDate\": \"2024-01-15\",\n  \"location\": \"Nablus\",\n  \"description\": \"Palestine insurance accident\",\n  \"damage\": \"Total damage\",\n  \"estimatedCost\": 5000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/PlestineAccidentReport/add/:plateNumber",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "PlestineAccidentReport",
+                "add",
+                ":plateNumber"
+              ],
+              "variable": [
+                {
+                  "key": "plateNumber",
+                  "value": "12-345-67"
+                }
+              ]
+            },
+            "description": "Add accident report for Palestine insurance"
+          }
+        },
+        {
+          "name": "Al-Mashreq Accident Report - Add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accidentDate\": \"2024-01-15\",\n  \"location\": \"Hebron\",\n  \"description\": \"Al-Mashreq insurance accident\",\n  \"damage\": \"Engine damage\",\n  \"estimatedCost\": 2500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Al_MashreqAccidentReport/add/:plateNumber",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "Al_MashreqAccidentReport",
+                "add",
+                ":plateNumber"
+              ],
+              "variable": [
+                {
+                  "key": "plateNumber",
+                  "value": "12-345-67"
+                }
+              ]
+            },
+            "description": "Add accident report for Al-Mashreq insurance"
+          }
+        },
+        {
+          "name": "Holy Land Report - Add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reportDate\": \"2024-01-15\",\n  \"location\": \"Jerusalem\",\n  \"description\": \"Holy Land insurance report\",\n  \"amount\": 1500,\n  \"status\": \"جديد\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/HolyLand/add/:plateNumber",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "HolyLand",
+                "add",
+                ":plateNumber"
+              ],
+              "variable": [
+                {
+                  "key": "plateNumber",
+                  "value": "12-345-67"
+                }
+              ]
+            },
+            "description": "Add report for Holy Land insurance"
+          }
+        }
+      ],
+      "description": "Insurance company specific accident reports"
+    },
+    {
+      "name": "Agents Management",
+      "item": [
+        {
+          "name": "Add Agent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Agent Name\",\n  \"email\": \"agent@example.com\",\n  \"phone\": \"+970-59-555-0123\",\n  \"region\": \"Ramallah\",\n  \"commission\": 5.5,\n  \"status\": \"نشط\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/addAgents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "addAgents"
+              ]
+            },
+            "description": "Add a new insurance agent"
+          }
+        },
+        {
+          "name": "Get All Agents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "all"
+              ]
+            },
+            "description": "Get all insurance agents"
+          }
+        },
+        {
+          "name": "Update Agent",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Agent Name\",\n  \"commission\": 6.0,\n  \"status\": \"غير نشط\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/updateAgents/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "updateAgents",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Update agent information"
+          }
+        },
+        {
+          "name": "Delete Agent",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/deleteAgents/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "deleteAgents",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Delete an insurance agent"
+          }
+        },
+        {
+          "name": "Get Total Agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/totalAgents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "totalAgents"
+              ]
+            },
+            "description": "Get total count of agents"
+          }
+        }
+      ],
+      "description": "Insurance agents management endpoints"
+    },
+    {
+      "name": "Financial Management",
+      "item": [
+        {
+          "name": "Add Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"Office Rent\",\n  \"amount\": 2000,\n  \"description\": \"Monthly office rent payment\",\n  \"date\": \"2024-01-15\",\n  \"paymentMethod\": \"نقد\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/addExpense",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "addExpense"
+              ]
+            },
+            "description": "Add a new business expense"
+          }
+        },
+        {
+          "name": "Get Net Profit",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/getNetProfit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "getNetProfit"
+              ]
+            },
+            "description": "Calculate and get net profit (revenue - expenses)"
+          }
+        },
+        {
+          "name": "Cancel Insurance",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancellationReason\": \"Customer request\",\n  \"refundAmount\": 500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/cancelInsurance/:insuredId/:vehicleId/:insuranceId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "cancelInsurance",
+                ":insuredId",
+                ":vehicleId",
+                ":insuranceId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                },
+                {
+                  "key": "vehicleId",
+                  "value": "vehicle_id_here"
+                },
+                {
+                  "key": "insuranceId",
+                  "value": "insurance_id_here"
+                }
+              ]
+            },
+            "description": "Cancel an insurance policy"
+          }
+        },
+        {
+          "name": "Get Company Financial Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/getCompanyFinancialReport",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "getCompanyFinancialReport"
+              ]
+            },
+            "description": "Get comprehensive company financial report"
+          }
+        },
+        {
+          "name": "Transfer Insurance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transferReason\": \"Vehicle sold\",\n  \"transferFee\": 50\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/revenue/transferInsurance/:insuredId/:fromVehicleId/:toVehicleId/:insuranceId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "revenue",
+                "transferInsurance",
+                ":insuredId",
+                ":fromVehicleId",
+                ":toVehicleId",
+                ":insuranceId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                },
+                {
+                  "key": "fromVehicleId",
+                  "value": "from_vehicle_id"
+                },
+                {
+                  "key": "toVehicleId",
+                  "value": "to_vehicle_id"
+                },
+                {
+                  "key": "insuranceId",
+                  "value": "insurance_id_here"
+                }
+              ]
+            },
+            "description": "Transfer insurance from one vehicle to another"
+          }
+        },
+        {
+          "name": "Get Customer Payments Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/revenue/getCustomerPaymentsReport",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "revenue",
+                "getCustomerPaymentsReport"
+              ]
+            },
+            "description": "Get customer payments report"
+          }
+        },
+        {
+          "name": "Get Transferred Insurances Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/revenue/getTransferredInsurancesReport",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "revenue",
+                "getTransferredInsurancesReport"
+              ]
+            },
+            "description": "Get report of transferred insurance policies"
+          }
+        },
+        {
+          "name": "Get Cancelled Insurances Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/revenue/getCancelledInsurancesReport",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "revenue",
+                "getCancelledInsurancesReport"
+              ]
+            },
+            "description": "Get report of cancelled insurance policies"
+          }
+        }
+      ],
+      "description": "Financial management, expense tracking, and revenue reporting"
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Insurance Renewal\",\n  \"message\": \"Your insurance policy is about to expire\",\n  \"type\": \"reminder\",\n  \"recipient\": \"user_id_here\",\n  \"priority\": \"high\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notification/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notification",
+                "create"
+              ]
+            },
+            "description": "Create a new notification"
+          }
+        },
+        {
+          "name": "Get All Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notification/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notification",
+                "all"
+              ]
+            },
+            "description": "Get all notifications for the current user"
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notification/markAsRead/:notificationId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notification",
+                "markAsRead",
+                ":notificationId"
+              ],
+              "variable": [
+                {
+                  "key": "notificationId",
+                  "value": "notification_id_here"
+                }
+              ]
+            },
+            "description": "Mark a specific notification as read"
+          }
+        },
+        {
+          "name": "Mark All as Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "token",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notification/markAllAsRead",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notification",
+                "markAllAsRead"
+              ]
+            },
+            "description": "Mark all notifications as read for the current user"
+          }
+        }
+      ],
+      "description": "Notification management endpoints"
+    },
+    {
+      "name": "Call Management",
+      "item": [
+        {
+          "name": "Get Call Recording",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"callDate\": \"2024-01-15\",\n  \"duration\": \"00:05:30\",\n  \"purpose\": \"Insurance inquiry\",\n  \"notes\": \"Customer asking about policy renewal\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/call/calls/:insuredId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "call",
+                "calls",
+                ":insuredId"
+              ],
+              "variable": [
+                {
+                  "key": "insuredId",
+                  "value": "insured_id_here"
+                }
+              ]
+            },
+            "description": "Record or retrieve call information for a customer"
+          }
+        }
+      ],
+      "description": "Call recording and management"
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "Get All Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/AuditLog/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "AuditLog",
+                "all"
+              ]
+            },
+            "description": "Get all system audit logs"
+          }
+        }
+      ],
+      "description": "System audit and activity logs"
+    }
+  ]
+}

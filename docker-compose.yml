@@ -1,0 +1,119 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: insurance-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-changeme}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-insurance_db}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - insurance-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: insurance-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - insurance-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: insurance-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3002}:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - DB_URI=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/${MONGO_DB_NAME:-insurance_db}?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - TokenSignIn=${TOKEN_SIGN_IN}
+      - authBearerToken=${AUTH_BEARER_TOKEN:-Bearer }
+      - saltRound=${SALT_ROUND:-10}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - ADMIN_NAME=${ADMIN_NAME:-System Admin}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@insurance.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin@123456}
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    networks:
+      - insurance-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/api/v1/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Migration Runner (runs once on startup)
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: insurance-migration
+    environment:
+      - NODE_ENV=production
+      - DB_URI=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/${MONGO_DB_NAME:-insurance_db}?authSource=admin
+      - ADMIN_NAME=${ADMIN_NAME:-System Admin}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@insurance.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin@123456}
+      - saltRound=${SALT_ROUND:-10}
+    networks:
+      - insurance-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: node migrations/migrate.js up
+    restart: "no"
+
+networks:
+  insurance-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  redis_data:
+    driver: local
