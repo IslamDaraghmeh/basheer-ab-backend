@@ -18,7 +18,7 @@ import PalestineAccidentReportRouter from "./PalestineAccidentReport/PalestineAc
 import Al_MashreqAccidentReportRouter from "./Al-MashreqAccidentReport/Al-MashreqAccidentReport.route.js";
 import HolyLandsReportRouter from "./HolyLandsReport/HolyLandsReport.route.js";
 import auditsRouter from "./auditLog/auditLog.route.js";
-import AgentRouter from "./Agents/Agents.route.js";
+import AgentRouter from "./agents/Agents.route.js";
 import accidentRouter from "./accident/accident.route.js";
 import expenseRouter from "./expense/expense.route.js";
 import revenueRouter from "./revenue/revenue.route.js";
