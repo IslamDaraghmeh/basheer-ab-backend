@@ -4,7 +4,7 @@ export async function sendEmail(dest,subject,message){
     service:'gmail',
     auth: {
         user: process.env.UserEmail,
-        pass: process.env.passwardApp
+        pass: process.env.passwordApp
     }
     });
 

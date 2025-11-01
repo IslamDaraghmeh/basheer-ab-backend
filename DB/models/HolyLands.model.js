@@ -1,6 +1,6 @@
 import mongoose,{Schema} from "mongoose";
 
-const HoliaccidentReportSchema = new mongoose.Schema({
+const HolyLandsAccidentReportSchema = new mongoose.Schema({
       insuredId: { 
         type: Schema.Types.ObjectId, 
         ref: "Insured", 
@@ -86,9 +86,9 @@ const HoliaccidentReportSchema = new mongoose.Schema({
   employeeSignature: String,
   employeeDate: Date,
 });
-const HoliAccidentReportModel = mongoose.model(
-  "HoliAccidentReport",
-  HoliaccidentReportSchema
+const HolyLandsAccidentReportModel = mongoose.model(
+  "HolyLandsAccidentReport",
+  HolyLandsAccidentReportSchema
 );
 
-export default HoliAccidentReportModel;
+export default HolyLandsAccidentReportModel;

@@ -33,7 +33,7 @@ documentSettingsRouter.get(
   endpointsDocumentSettings.GET_ALL_DOCUMENT_SETTINGS,
   auth(endpointsRolesDocumentSettings.GET_ALL_DOCUMENT_SETTINGS),
   validation(documentSettingsValidation.getAllDocumentSettings),
-  documentSettingsController.getAllDocumentSettings
+  documentSettingsController.list
 );
 
 // Update document settings with optional logo upload (must be before /:id route)

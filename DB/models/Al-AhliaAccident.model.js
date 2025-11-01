@@ -99,6 +99,6 @@ const AhliaAccidentReportSchema = new Schema({
   }
 });
 
-const AhliAccidentReportModel = mongoose.model("AhliAccidentReport", AhliaAccidentReportSchema);
+const AhliaAccidentReportModel = mongoose.model("AhliaAccidentReport", AhliaAccidentReportSchema);
 
-export  default AhliAccidentReportModel ;
+export  default AhliaAccidentReportModel ;

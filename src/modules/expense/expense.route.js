@@ -7,8 +7,8 @@ import { cacheMiddleware, paginationCacheKey } from "../../middleware/cacheMiddl
 const expenseRouter = Router();
 
 // Expense CRUD operations
-expenseRouter.post('/addExpense', validateRequest(validation.addExpenseSchema), expenseRoute.addExpense);
-expenseRouter.get('/getExpenses', expenseRoute.getExpenses);
+expenseRouter.post('/addExpense', validateRequest(validation.addExpenseSchema), expenseRoute.create);
+expenseRouter.get('/getExpenses', expenseRoute.list);
 expenseRouter.get('/all', cacheMiddleware(300, paginationCacheKey), validateRequest(validation.expenseFiltersSchema, 'query'), expenseRoute.getExpensesWithFilters);
 expenseRouter.put('/:id', validateRequest(validation.updateExpenseSchema), expenseRoute.updateExpense);
 expenseRouter.delete('/:id', expenseRoute.deleteExpense);

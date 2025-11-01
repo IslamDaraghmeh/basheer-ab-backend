@@ -4,7 +4,7 @@ export const endPoints={
     deleteInsured:[roles.Admin , roles.Employee , roles.HeadOfEmployee],
     updateInsured:[roles.Admin , roles.HeadOfEmployee],
     allInsured:[roles.Admin , roles.HeadOfEmployee , roles.Employee],
-    findbyidInsured:[roles.Admin , roles.HeadOfEmployee , roles.Employee],
+    findInsuredById:[roles.Admin , roles.HeadOfEmployee , roles.Employee],
     searchCustomer:[roles.Admin , roles.HeadOfEmployee , roles.Employee],
     addcar:[roles.Admin,roles.HeadOfEmployee , roles.Employee],
     removeCar:[roles.Admin , roles.HeadOfEmployee , roles.Employee],

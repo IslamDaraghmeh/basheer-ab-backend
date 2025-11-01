@@ -1,116 +1,127 @@
-import DepartmentModel from "../../../../DB/models/Department.model.js";
+import DepartmentModel from "#db/models/Department.model.js";
 import mongoose from 'mongoose';
-
+import logger from "#utils/logService.js";
+import { asyncHandler } from "#utils/asyncHandler.js";
+import { logAudit } from "#utils/auditLogger.js";
+import {
+  successResponse,
+  createdResponse,
+  notFoundResponse,
+  badRequestResponse
+} from "#utils/apiResponse.js";
 
 const dropUniqueIndex = async () => {
-    try {
-        await mongoose.connection.db.collection('departments').dropIndex("headOfEmployee.email_1");
-        console.log("Dropped index: headOfEmployee.email");
-    } catch (error) {
-        if (error.codeName !== "IndexNotFound") {
-            console.error("Error dropping index:", error);
-        }
+  try {
+    await mongoose.connection.db.collection('departments').dropIndex("headOfEmployee.email_1");
+    logger.info("Dropped index: headOfEmployee.email");
+  } catch (error) {
+    if (error.codeName !== "IndexNotFound") {
+      logger.error("Error dropping index", { error: error.message });
     }
+  }
 };
 
 const dropUniqueIndexEmployee = async () => {
-    try {
-        await mongoose.connection.db.collection('departments').dropIndex("employees.email_1");
-        console.log("Dropped index: employees.email");
-    } catch (error) {
-        if (error.codeName !== "IndexNotFound") {
-            console.error("Error dropping index:", error);
-        }
+  try {
+    await mongoose.connection.db.collection('departments').dropIndex("employees.email_1");
+    logger.info("Dropped index: employees.email");
+  } catch (error) {
+    if (error.codeName !== "IndexNotFound") {
+      logger.error("Error dropping index", { error: error.message });
     }
+  }
 };
 
+export const create = asyncHandler(async (req, res) => {
+  const { name, permissions, description } = req.body;
 
-export const AddDepartment = async (req, res, next) => {
-    const { name, permissions, description } = req.body;
-    try {
-        await dropUniqueIndex();
-        await dropUniqueIndexEmployee();
+  await dropUniqueIndex();
+  await dropUniqueIndexEmployee();
 
-        const addDepartment = await DepartmentModel.create({
-            name,
-            permissions,
-            description,
-        });
+  const addDepartment = await DepartmentModel.create({
+    name,
+    permissions,
+    description,
+  });
 
-        if (!addDepartment) {
-            return res.status(400).json({ message: "Error in adding department" });
-        }
+  if (!addDepartment) {
+    return badRequestResponse(res, "Error in adding department");
+  }
 
-        return res.status(200).json({
-            message: "Department added successfully",
-            department: addDepartment,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
+  logger.info("Department created", {
+    departmentId: addDepartment._id,
+    name,
+    userId: req.user?._id
+  });
 
+  return createdResponse(res, { department: addDepartment }, "Department added successfully");
+});
 
-export const deleteDepartment = async (req, res, next) => {
-    const { id } = req.params;
-    try {
-        const department = await DepartmentModel.findById(id);
-        if (!department) {
-            return res.status(404).json({ message: "Department not found" });
-        }
+export const remove = asyncHandler(async (req, res) => {
+  const { id } = req.params;
 
-        await DepartmentModel.findByIdAndDelete(id);
-        return res.status(200).json({ message: "Department deleted successfully" });
-    } catch (error) {
-        next(error);
-    }
-};
+  const department = await DepartmentModel.findById(id);
+  if (!department) {
+    return notFoundResponse(res, "Department");
+  }
 
+  await DepartmentModel.findByIdAndDelete(id);
 
-export const allDepartment = async (req, res, next) => {
-    try {
-        const departments = await DepartmentModel.find({});
-        if (!departments || departments.length === 0) {
-            return res.status(404).json({ message: "No departments found" });
-        }
+  logger.info("Department deleted", {
+    departmentId: id,
+    name: department.name,
+    userId: req.user?._id
+  });
 
-        return res.status(200).json({ message: "All departments", departments });
-    } catch (error) {
-        next(error);
-    }
-};
+  return successResponse(res, null, "Department deleted successfully");
+});
 
+export const list = asyncHandler(async (req, res) => {
+  const departments = await DepartmentModel.find({});
 
-export const depById = async (req, res, next) => {
-    const { id } = req.params;
-    try {
-        const department = await DepartmentModel.findById(id);
-        if (!department) {
-            return res.status(404).json({ message: "Department not found" });
-        }
+  if (!departments || departments.length === 0) {
+    return notFoundResponse(res, "No departments found");
+  }
 
-        return res.status(200).json({ message: "Requested department", department });
-    } catch (error) {
-        next(error);
-    }
-};
+  logger.info("Departments retrieved", { count: departments.length });
 
+  return successResponse(res, { departments }, "All departments");
+});
 
-export const updateDep = async (req, res, next) => {
-    const { name, description } = req.body;
-    const { id } = req.params;
-    try {
-        const department = await DepartmentModel.findById(id);
-        if (!department) {
-            return res.status(404).json({ message: "Department not found" });
-        }
+export const getById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
 
-        department.name = name || department.name;
-        department.description = description || department.description;
-        await department.save();
+  const department = await DepartmentModel.findById(id);
+  if (!department) {
+    return notFoundResponse(res, "Department");
+  }
 
-        res.status(200).json({ message: "Department updated successfully", department });
-    } catch (error) {
-        next(error);
-    }
-};
+  logger.info("Department retrieved by ID", { departmentId: id });
+
+  return successResponse(res, { department }, "Requested department");
+});
+
+export const update = asyncHandler(async (req, res) => {
+  const { name, description } = req.body;
+  const { id } = req.params;
+
+  const department = await DepartmentModel.findById(id);
+  if (!department) {
+    return notFoundResponse(res, "Department");
+  }
+
+  const oldValues = { name: department.name, description: department.description };
+
+  department.name = name || department.name;
+  department.description = description || department.description;
+  await department.save();
+
+  logger.info("Department updated", {
+    departmentId: id,
+    oldValues,
+    newValues: { name: department.name, description: department.description },
+    userId: req.user?._id
+  });
+
+  return successResponse(res, { department }, "Department updated successfully");
+});

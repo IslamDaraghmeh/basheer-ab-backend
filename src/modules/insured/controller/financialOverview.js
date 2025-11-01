@@ -1,7 +1,7 @@
-import { insuredModel } from "../../../../DB/models/Insured.model.js";
-import { ExpenseModel } from "../../../../DB/models/Expense.model.js";
-import { RevenueModel } from "../../../../DB/models/Revenue.model.js";
-import logger from "../../../utils/logService.js";
+import { insuredModel } from "#db/models/Insured.model.js";
+import { ExpenseModel } from "#db/models/Expense.model.js";
+import { RevenueModel } from "#db/models/Revenue.model.js";
+import logger from "#utils/logService.js";
 
 /**
  * Financial Overview for Charts

@@ -8,16 +8,16 @@ const insuranceCompanyRouter=Router();
 // Insurance Company CRUD
 
 // Create
-insuranceCompanyRouter.post('/addInsuranceCompany',auth(endpoints.addCompany),insuranceCompanyRoute.addInsuranceCompany)
+insuranceCompanyRouter.post('/addInsuranceCompany',auth(endpoints.addCompany),insuranceCompanyRoute.create)
 
 // Read
-insuranceCompanyRouter.get('/all',auth(endpoints.allCompany),insuranceCompanyRoute.getAllInsuranceCompanies)
+insuranceCompanyRouter.get('/all',auth(endpoints.allCompany),insuranceCompanyRoute.list)
 insuranceCompanyRouter.get('/by-type/:insuranceTypeId',auth(endpoints.allCompany),insuranceCompanyRoute.getCompaniesByInsuranceType)
 insuranceCompanyRouter.get('/:id',auth(endpoints.allCompany),insuranceCompanyRoute.getInsuranceCompanyById)
 
 // Update
-insuranceCompanyRouter.patch('/updateInsuranceCompany/:id',auth(endpoints.upateCompany),insuranceCompanyRoute.updateInsuranceCompany) // Legacy
-insuranceCompanyRouter.patch('/:id',auth(endpoints.upateCompany),insuranceCompanyRoute.updateInsuranceCompany) // New simplified
+insuranceCompanyRouter.patch('/updateInsuranceCompany/:id',auth(endpoints.updateCompany),insuranceCompanyRoute.updateInsuranceCompany) // Legacy
+insuranceCompanyRouter.patch('/:id',auth(endpoints.updateCompany),insuranceCompanyRoute.updateInsuranceCompany) // New simplified
 
 // Delete
 insuranceCompanyRouter.delete('/delete/:id',auth(endpoints.deleteCompany),insuranceCompanyRoute.deleteInsuranceCompany) // Legacy

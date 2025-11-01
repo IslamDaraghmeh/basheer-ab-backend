@@ -16,7 +16,7 @@ smsRouter.post("/test", smsController.testSMS);
 smsRouter.get("/status", smsController.getStatus);
 
 // Get all SMS records with pagination
-smsRouter.get("/all", smsController.getAllSMS);
+smsRouter.get("/all", smsController.list);
 
 // Get SMS statistics
 smsRouter.get("/stats", smsController.getSMSStats);

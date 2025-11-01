@@ -10,13 +10,13 @@ const accidentRouter = Router();
 accidentRouter.get('/all', auth(endPoints.allAccident), accidentRoute.getAllAccidentsWithPagination)
 
 // Legacy endpoints (kept for backward compatibility)
-accidentRouter.post('/addAccident/:insuredId/:vehicleId', auth(endPoints.addAccident), myMulter(fileValidation.imag).array('image'), accidentRoute.addAccident)
-accidentRouter.get('/getAccident/:insuredId/:vehicleId', auth(endPoints.allAccident), accidentRoute.getAccidents)
+accidentRouter.post('/addAccident/:insuredId/:vehicleId', auth(endPoints.addAccident), myMulter(fileValidation.imag).array('image'), accidentRoute.create)
+accidentRouter.get('/getAccident/:insuredId/:vehicleId', auth(endPoints.allAccident), accidentRoute.list)
 accidentRouter.delete('/deleteAccident/:id', auth(endPoints.deleteAccident), accidentRoute.deleteAccident)
 accidentRouter.patch('/updateAccident/:id', auth(endPoints.updateAccident), accidentRoute.updateAccident)
 
 // Statistics & Reports
-accidentRouter.get('/totalAccidents', auth(endPoints.allAccident), accidentRoute.totalAccidents)
+accidentRouter.get('/totalAccidents', auth(endPoints.allAccident), accidentRoute.count)
 accidentRouter.get('/accidentReport', auth(endPoints.allAccident), accidentRoute.accidentReport)
 accidentRouter.get('/stats', auth(endPoints.allAccident), accidentRoute.getAccidentStats)
 

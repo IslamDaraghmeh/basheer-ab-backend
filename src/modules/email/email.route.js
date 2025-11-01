@@ -7,7 +7,7 @@ const emailRouter = Router();
 emailRouter.get("/inbox", emailController.getInbox);
 
 // Get all emails from database with pagination
-emailRouter.get("/all", emailController.getAllEmails);
+emailRouter.get("/all", emailController.list);
 
 // Get single email by ID
 emailRouter.get("/:id", emailController.getEmailById);

@@ -9,9 +9,8 @@ const userSchema=new Schema({
         required:true,
     },
     password:{
-        type:String ,
-    
-        default:"islam@112233" 
+        type:String,
+        required:true  // No default password - must be set explicitly
     },
     departmentId: {
         type: Schema.Types.ObjectId,
@@ -21,9 +20,25 @@ const userSchema=new Schema({
     role:{
         type:String ,
         enum:['admin', 'employee','insured','HeadOfEmployee','agents']
-
-        
     },
+    // Password reset fields
+    resetPasswordToken: {
+        type: String,
+        default: null
+    },
+    resetPasswordExpires: {
+        type: Date,
+        default: null
+    },
+    resetPasswordAttempts: {
+        type: Number,
+        default: 0
+    },
+    resetPasswordLockUntil: {
+        type: Date,
+        default: null
+    },
+    // Legacy field - kept for backward compatibility, will be replaced by resetPasswordToken
     sendCode: {
         type: String,
         default: null

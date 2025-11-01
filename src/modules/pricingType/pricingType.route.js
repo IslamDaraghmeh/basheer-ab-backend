@@ -15,7 +15,7 @@ pricingTypeRouter.post(
 pricingTypeRouter.get(
   "/all",
   auth(),
-  pricingTypeController.getAllPricingTypes
+  pricingTypeController.list
 );
 
 // Get pricing type by ID

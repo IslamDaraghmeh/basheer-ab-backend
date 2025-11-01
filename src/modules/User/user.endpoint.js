@@ -2,8 +2,8 @@ import { roles } from "../../services/roles.js";
 export const endPoints={
 
    prof:[roles.Admin,roles.Insured,roles.Agents,roles.HeadOfEmployee],
-    addHeadOfDepartmentToDepartmen:[roles.Admin],
-    deleteHeadOfDepartmentToDepartmen:[roles.Admin],
+    addHeadOfDepartmentToDepartment:[roles.Admin],
+    deleteHeadOfDepartmentToDepartment:[roles.Admin],
     getHeadOfDepartment:[roles.Admin],
     addEmployee:[roles.Admin , roles.HeadOfEmployee],
     deleteEmployee:[roles.Admin , roles.HeadOfEmployee],

@@ -15,7 +15,7 @@ insuranceCompanyPricingRouter.post(
 insuranceCompanyPricingRouter.get(
   "/all",
   auth(),
-  pricingController.getAllPricing
+  pricingController.list
 );
 
 // Get pricing by company

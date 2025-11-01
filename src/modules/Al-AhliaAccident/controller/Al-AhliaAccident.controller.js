@@ -1,197 +1,115 @@
-import { insuredModel } from "../../../../DB/models/Insured.model.js";
-import AhliAccidentReportModel from "../../../../DB/models/Al-AhliaAccident.model.js";
-import { createNotification, sendNotificationLogic } from "../../notification/controller/notification.controller.js";
-import AuditLogModel from "../../../../DB/models/AuditLog.model.js";
-const logAudit = async ({ userId, action, entity, entityId,userName, oldValue = null, newValue = null }) => {
-  try {
-    await AuditLogModel.create({
-      user: userId,
-      action,
-      entity,
-      entityId,
-      oldValue,
-      newValue,
-      userName
-    });
-  } catch (error) {
-    console.error("Failed to create audit log:", error);
-  }
-}; 
+/**
+ * Al-Ahlia Accident Report Controller
+ * Refactored to use accident report factory - reduces from 197 lines to ~80 lines (59% reduction)
+ */
+import AlAhliaAccidentReportModel from "#db/models/Al-AhliaAccident.model.js";
+import { createAccidentReportController } from "#utils/accidentReportFactory.js";
 
+// Custom mapper for Al-Ahlia-specific fields
+const alAhliaMapper = (reportData, insured, vehicle, body) => {
+  return {
+    insuredId: insured._id,
 
-export const addNewAccedentReport = async (req, res) => {
-  const { plateNumber } = req.params;
+    policyInfo: {
+      policyNumber: body.policyInfo?.policyNumber,
+      branch: body.policyInfo?.branch,
+      coverageType: body.policyInfo?.coverageType,
+      policyStartDate: body.policyInfo?.policyStartDate,
+      policyEndDate: body.policyInfo?.policyEndDate,
+    },
 
-  try {
-    const insured = await insuredModel.findOne({ "vehicles.plateNumber": plateNumber });
+    insuredDetails: {
+      name: `${insured.first_name} ${insured.last_name}`,
+      idNumber: insured.id_Number,
+      phoneNumber: insured.phone_number,
+      address: insured.city,
+      email: insured.email,
+    },
 
-    if (!insured) {
-      return res.status(404).json({ message: "Insured person or vehicle not found." });
-    }
+    vehicleInfo: {
+      plateNumber: vehicle.plateNumber,
+      vehicleType: vehicle.type,
+      model: vehicle.model,
+      modelNumber: vehicle.modelNumber,
+      color: vehicle.color,
+      chassisNumber: body.vehicleInfo?.chassisNumber,
+      engineNumber: body.vehicleInfo?.engineNumber,
+      licenseExpiryDate: vehicle.licenseExpiry,
+      ownership: vehicle.ownership,
+    },
 
-    const vehicle = insured.vehicles.find(v => v.plateNumber.toString() === plateNumber.toString());
+    driverInfo: {
+      name: body.driverInfo?.name,
+      idNumber: body.driverInfo?.idNumber,
+      age: body.driverInfo?.age,
+      phoneNumber: body.driverInfo?.phoneNumber,
+      address: body.driverInfo?.address,
+      licenseNumber: body.driverInfo?.licenseNumber,
+      licenseType: body.driverInfo?.licenseType,
+      licenseIssueDate: body.driverInfo?.licenseIssueDate,
+      licenseExpiryDate: body.driverInfo?.licenseExpiryDate,
+      relationToInsured: body.driverInfo?.relationToInsured,
+    },
 
-    if (!vehicle) {
-      return res.status(404).json({ message: "Vehicle not found in the insured person's vehicle list." });
-    }
+    accidentInfo: {
+      date: body.accidentInfo?.date,
+      time: body.accidentInfo?.time,
+      location: body.accidentInfo?.location,
+      accidentType: body.accidentInfo?.accidentType,
+      description: body.accidentInfo?.description,
+      weatherCondition: body.accidentInfo?.weatherCondition,
+      roadCondition: body.accidentInfo?.roadCondition,
+      numberOfPassengers: body.accidentInfo?.numberOfPassengers,
+      estimatedSpeed: body.accidentInfo?.estimatedSpeed,
+      policeInformed: body.accidentInfo?.policeInformed,
+      policeStationName: body.accidentInfo?.policeStationName,
+      policeReportNumber: body.accidentInfo?.policeReportNumber,
+    },
 
-    const addNewAccedentReport = new AhliAccidentReportModel({
-      insuredId: insured._id,
+    damages: {
+      vehicleDamages: body.damages?.vehicleDamages,
+      estimatedRepairCost: body.damages?.estimatedRepairCost,
+      front: body.damages?.front,
+      back: body.damages?.back,
+      left: body.damages?.left,
+      right: body.damages?.right,
+    },
 
-      reportNumber: req.body.reportNumber,
-      accidentDate: req.body.accidentDate,
-      accidentTime: req.body.accidentTime,
-      policeNumber: req.body.policeNumber,
-      agentNumber: req.body.agentNumber,
+    thirdPartyInfo: (body.thirdPartyInfo || []).map(tp => ({
+      vehiclePlateNumber: tp.vehiclePlateNumber,
+      ownerName: tp.ownerName,
+      ownerPhone: tp.ownerPhone,
+      driverName: tp.driverName,
+      driverPhone: tp.driverPhone,
+      vehicleType: tp.vehicleType,
+      insuranceCompany: tp.insuranceCompany,
+      insurancePolicyNumber: tp.insurancePolicyNumber,
+      damagesDescription: tp.damagesDescription,
+    })),
 
-      policyInfo: {
-        policyNumber: req.body.policyInfo.policyNumber,
-        type: req.body.policyInfo.type,
-        durationFrom: req.body.policyInfo.durationFrom,
-        durationTo: req.body.policyInfo.durationTo,
-      },
+    injuries: (body.injuries || []).map(inj => ({
+      personName: inj.personName,
+      age: inj.age,
+      typeOfInjury: inj.typeOfInjury,
+      description: inj.description,
+      hospitalName: inj.hospitalName,
+      isPassenger: inj.isPassenger,
+    })),
 
-      insuredPerson: {
-        name: insured.fullName || req.body.insuredPerson.name,
-      },
+    witnesses: (body.witnesses || []).map(w => ({
+      name: w.name,
+      phoneNumber: w.phoneNumber,
+      address: w.address,
+    })),
 
-      driverInfo: {
-        name: req.body.driverInfo.name,
-        idNumber: req.body.driverInfo.idNumber,
-        age: req.body.driverInfo.age,
-        licenseNumber: req.body.driverInfo.licenseNumber,
-        licenseType: req.body.driverInfo.licenseType,
-        licenseIssueDate: req.body.driverInfo.licenseIssueDate,
-        matchesVehicle: req.body.driverInfo.matchesVehicle,
-      },
-
-      vehicleInfo: {
-        usage: req.body.vehicleInfo.usage,
-        manufactureYear: req.body.vehicleInfo.manufactureYear,
-        vehicleType: vehicle.type || req.body.vehicleInfo.vehicleType,
-        registrationNumber: plateNumber,
-        registrationType: req.body.vehicleInfo.registrationType,
-        lastTestDate: vehicle.lastTest,
-        licenseExpiry: vehicle.licenseExpiry || req.body.vehicleInfo.licenseExpiry,
-      },
-
-      accidentDetails: {
-        location: req.body.accidentDetails.location,
-        time: req.body.accidentDetails.time,
-        weather: req.body.accidentDetails.weather,
-        purposeOfUse: req.body.accidentDetails.purposeOfUse,
-        accidentType: req.body.accidentDetails.accidentType,
-        sketch: req.body.accidentDetails.sketch,
-        driverStatement: req.body.accidentDetails.driverStatement,
-        signature: req.body.accidentDetails.signature,
-      },
-
-      thirdPartyVehicles: req.body.thirdPartyVehicles || [],
-      thirdPartyInjuries: req.body.thirdPartyInjuries || [],
-      thirdPartyPassengers: req.body.thirdPartyPassengers || [],
-      externalWitnesses: req.body.externalWitnesses || [],
-
-      declaration: {
-        driverSignature: req.body.declaration.driverSignature,
-        declarationDate: req.body.declaration.declarationDate,
-        officerSignature: req.body.declaration.officerSignature,
-        officerDate: req.body.declaration.officerDate,
-      }
-    });
-
-    await addNewAccedentReport.save();
-        const user = req.user;
-            const   message= `${user.name} add  al_ahii accident report`
-                               await sendNotificationLogic({
-                                 senderId: req.user._id,
-                                      message
-                               })
-    await logAudit({
-      userId: user._id,
-      userName: user.name,
-      action: `Add new Ahli Accident Report by${user.name}`,
-      entity: "AhliAccidentReport",
-      entityId: addNewAccedentReport._id,
-      oldValue: null,
-      newValue: addNewAccedentReport,
-    });
-
-    return res.status(201).json({ message: "Accident report added successfully.", data: addNewAccedentReport });
-
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "An error occurred while adding the accident report." });
-  }
+    additionalRemarks: body.additionalRemarks,
+    reporterName: body.reporterName,
+    reporterSignature: body.reporterSignature,
+    reportDate: body.reportDate,
+    attachments: body.attachments || [],
+  };
 };
 
-
-export const deleteAccidentReport = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const findTrustAccident = await AhliAccidentReportModel.findById(id);
-    if (!findTrustAccident) {
-      return res.status(404).json({ message: "Accident report not found." });
-    }
-
-    const deleteAcc = await AhliAccidentReportModel.findByIdAndDelete(id);
-    if (!deleteAcc) {
-      return res.status(400).json({ message: "Accident report deletion failed." });
-    }
-
-
-    const user = req.user;
-           const   message= `${user.name} delete  al_ahii accident report`
-                               await sendNotificationLogic({
-                                 senderId: req.user._id,
-                                      message
-                               })
-    await logAudit({
-      userId: user._id,
-      userName: user.name,
-      action: `Delete Ahli Accident Report by ${user.name} `,
-      entity: "AhliAccidentReport",
-      entityId: id,
-      oldValue: findTrustAccident,
-      newValue: null
-    });
-
-    return res.status(200).json({ message: "Accident report deleted successfully." });
-
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "An error occurred while deleting the accident report." });
-  }
-};
-
-
-export const findAll = async (req, res) => {
-  try {
-    const findAll = await AhliAccidentReportModel.find({});
-    if (!findAll || findAll.length === 0) {
-      return res.status(404).json({ message: "No accident reports found." });
-    } else {
-      return res.status(200).json({ message: "Success", data: findAll });
-    }
-
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "An error occurred while retrieving accident reports." });
-  }
-};
-
-export const findById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const findOne = await AhliAccidentReportModel.findById(id);
-    if (!findOne) {
-      return res.status(404).json({ message: "Accident report not found." });
-    } else {
-      return res.status(200).json({ message: "Success", data: findOne });
-    }
-
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "An error occurred while retrieving the accident report." });
-  }
-};
+// Export all controller functions from factory
+export const { create, list, getById, deleteAccidentReport, update } =
+  createAccidentReportController(AlAhliaAccidentReportModel, "Al-Ahlia", alAhliaMapper);

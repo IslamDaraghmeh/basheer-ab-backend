@@ -9,14 +9,14 @@ const roadServiceRouter = Router();
 roadServiceRouter.post(
   '/:companyId',
   auth(endpoints.addService),
-  roadServiceController.addRoadService
+  roadServiceController.create
 );
 
 // Get all road services
 roadServiceRouter.get(
   '/all',
   auth(endpoints.allServices),
-  roadServiceController.getAllRoadServices
+  roadServiceController.list
 );
 
 // Get road services by company

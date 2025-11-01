@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check:*)",
+      "Bash(find:*)",
+      "Bash(node -e:*)",
+      "Bash(dir:*)",
+      "Bash(tree:*)",
+      "Bash(npm install:*)",
+      "Bash(test:*)",
+      "Bash(mongosh:*)",
+      "Bash(npm run dev:*)",
+      "Bash(taskkill /F /PID 14364)",
+      "Bash(taskkill //F //PID 14364)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill //F //PID 27508)",
+      "Bash(taskkill //F //PID 28784)",
+      "Bash(timeout 5 sleep:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

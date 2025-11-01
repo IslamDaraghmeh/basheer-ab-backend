@@ -1,85 +1,130 @@
-import { EmailModel } from "../../../../DB/models/Email.model.js";
+import { EmailModel } from "#db/models/Email.model.js";
 import {
   fetchInbox,
   sendSingleEmail,
   sendBulkEmails,
-} from "../../../services/emailService.js";
+} from "#services/emailService.js";
+import { asyncHandler } from "#utils/asyncHandler.js";
+import { logAudit } from "#utils/auditLogger.js";
+import {
+  successResponse,
+  notFoundResponse,
+  badRequestResponse
+} from "#utils/apiResponse.js";
 
 // Get inbox with pagination
-export const getInbox = async (req, res, next) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+export const getInbox = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
 
-    const result = await fetchInbox(page, limit);
+  const result = await fetchInbox(page, limit);
 
-    // Optionally save emails to database
-    for (const email of result.emails) {
-      await EmailModel.findOneAndUpdate(
-        { messageId: email.messageId },
-        {
-          messageId: email.messageId,
-          from: email.from,
-          to: [email.to],
-          subject: email.subject,
-          body: email.text,
-          htmlBody: email.html,
-          receivedDate: email.date,
-          status: "received",
-          isRead: false,
-          attachments: email.attachments,
-        },
-        { upsert: true, new: true }
-      );
-    }
-
-    res.status(200).json({
-      message: "Inbox fetched successfully",
-      data: result.emails,
-      pagination: {
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-        totalPages: result.totalPages,
+  // Optionally save emails to database
+  for (const email of result.emails) {
+    await EmailModel.findOneAndUpdate(
+      { messageId: email.messageId },
+      {
+        messageId: email.messageId,
+        from: email.from,
+        to: [email.to],
+        subject: email.subject,
+        body: email.text,
+        htmlBody: email.html,
+        receivedDate: email.date,
+        status: "received",
+        isRead: false,
+        attachments: email.attachments,
       },
-    });
-  } catch (error) {
-    console.error("Error fetching inbox:", error);
-    next(error);
+      { upsert: true, new: true }
+    );
   }
-};
+
+  return successResponse(res, {
+    emails: result.emails,
+    pagination: {
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      totalPages: result.totalPages,
+    }
+  }, "Inbox fetched successfully");
+});
 
 // Send single email
-export const sendEmail = async (req, res, next) => {
-  try {
-    const { to, cc, bcc, subject, text, html, attachments } = req.body;
+export const sendEmail = asyncHandler(async (req, res) => {
+  const { to, cc, bcc, subject, text, html, attachments } = req.body;
 
-    if (!to || !subject) {
-      return res
-        .status(400)
-        .json({ message: "Recipient (to) and subject are required" });
-    }
+  if (!to || !subject) {
+    return badRequestResponse(res, "Recipient (to) and subject are required");
+  }
 
-    const emailData = {
-      to,
-      cc,
-      bcc,
+  const emailData = {
+    to,
+    cc,
+    bcc,
+    subject,
+    text,
+    html,
+    attachments,
+  };
+
+  const result = await sendSingleEmail(emailData);
+
+  if (result.success) {
+    // Save to database
+    const email = new EmailModel({
+      messageId: result.messageId,
+      from: process.env.GMAIL_USER || "basheerinsurance99@gmail.com",
+      to: Array.isArray(to) ? to : [to],
+      cc: cc || [],
+      bcc: bcc || [],
       subject,
-      text,
-      html,
-      attachments,
-    };
+      body: text,
+      htmlBody: html,
+      sentDate: new Date(),
+      status: "sent",
+      isSent: true,
+      attachments: attachments || [],
+    });
+    await email.save();
 
-    const result = await sendSingleEmail(emailData);
+    return successResponse(res, {
+      messageId: result.messageId,
+      email
+    }, "Email sent successfully");
+  } else {
+    return badRequestResponse(res, "Failed to send email", result.error);
+  }
+});
 
+// Send bulk emails
+export const sendBulkEmail = asyncHandler(async (req, res) => {
+  const { recipients, subject, text, html, attachments } = req.body;
+
+  if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+    return badRequestResponse(res, "Recipients array is required");
+  }
+
+  if (!subject) {
+    return badRequestResponse(res, "Subject is required");
+  }
+
+  const emailTemplate = {
+    subject,
+    text,
+    html,
+    attachments,
+  };
+
+  const results = await sendBulkEmails(recipients, emailTemplate);
+
+  // Save successful emails to database
+  for (const result of results) {
     if (result.success) {
-      // Save to database
       const email = new EmailModel({
         messageId: result.messageId,
         from: process.env.GMAIL_USER || "basheerinsurance99@gmail.com",
-        to: Array.isArray(to) ? to : [to],
-        cc: cc || [],
-        bcc: bcc || [],
+        to: [result.email],
         subject,
         body: text,
         htmlBody: html,
@@ -89,153 +134,76 @@ export const sendEmail = async (req, res, next) => {
         attachments: attachments || [],
       });
       await email.save();
-
-      res.status(200).json({
-        message: "Email sent successfully",
-        messageId: result.messageId,
-        email,
-      });
-    } else {
-      res.status(500).json({
-        message: "Failed to send email",
-        error: result.error,
-      });
     }
-  } catch (error) {
-    console.error("Error sending email:", error);
-    next(error);
   }
-};
 
-// Send bulk emails
-export const sendBulkEmail = async (req, res, next) => {
-  try {
-    const { recipients, subject, text, html, attachments } = req.body;
+  const successCount = results.filter((r) => r.success).length;
+  const failureCount = results.filter((r) => !r.success).length;
 
-    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
-      return res.status(400).json({ message: "Recipients array is required" });
-    }
-
-    if (!subject) {
-      return res.status(400).json({ message: "Subject is required" });
-    }
-
-    const emailTemplate = {
-      subject,
-      text,
-      html,
-      attachments,
-    };
-
-    const results = await sendBulkEmails(recipients, emailTemplate);
-
-    // Save successful emails to database
-    for (const result of results) {
-      if (result.success) {
-        const email = new EmailModel({
-          messageId: result.messageId,
-          from: process.env.GMAIL_USER || "basheerinsurance99@gmail.com",
-          to: [result.email],
-          subject,
-          body: text,
-          htmlBody: html,
-          sentDate: new Date(),
-          status: "sent",
-          isSent: true,
-          attachments: attachments || [],
-        });
-        await email.save();
-      }
-    }
-
-    const successCount = results.filter((r) => r.success).length;
-    const failureCount = results.filter((r) => !r.success).length;
-
-    res.status(200).json({
-      message: "Bulk email process completed",
-      summary: {
-        total: results.length,
-        successful: successCount,
-        failed: failureCount,
-      },
-      results,
-    });
-  } catch (error) {
-    console.error("Error sending bulk emails:", error);
-    next(error);
-  }
-};
+  return successResponse(res, {
+    summary: {
+      total: results.length,
+      successful: successCount,
+      failed: failureCount,
+    },
+    results
+  }, "Bulk email process completed");
+});
 
 // Get all emails from database
-export const getAllEmails = async (req, res, next) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const status = req.query.status; // filter by status (sent, received, draft, failed)
+export const list = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const status = req.query.status; // filter by status (sent, received, draft, failed)
 
-    const filter = {};
-    if (status) {
-      filter.status = status;
-    }
-
-    const total = await EmailModel.countDocuments(filter);
-    const emails = await EmailModel.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .skip((page - 1) * limit);
-
-    res.status(200).json({
-      message: "Emails fetched successfully",
-      emails,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching emails:", error);
-    next(error);
+  const filter = {};
+  if (status) {
+    filter.status = status;
   }
-};
+
+  const total = await EmailModel.countDocuments(filter);
+  const emails = await EmailModel.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .skip((page - 1) * limit);
+
+  return successResponse(res, {
+    emails,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    }
+  }, "Emails fetched successfully");
+});
 
 // Get single email by ID
-export const getEmailById = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const email = await EmailModel.findById(id);
+export const getEmailById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const email = await EmailModel.findById(id);
 
-    if (!email) {
-      return res.status(404).json({ message: "Email not found" });
-    }
-
-    // Mark as read
-    if (!email.isRead && email.status === "received") {
-      email.isRead = true;
-      await email.save();
-    }
-
-    res.status(200).json({ message: "Email fetched successfully", email });
-  } catch (error) {
-    console.error("Error fetching email:", error);
-    next(error);
+  if (!email) {
+    return notFoundResponse(res, "Email");
   }
-};
+
+  // Mark as read
+  if (!email.isRead && email.status === "received") {
+    email.isRead = true;
+    await email.save();
+  }
+
+  return successResponse(res, { email }, "Email fetched successfully");
+});
 
 // Delete email
-export const deleteEmail = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const deleted = await EmailModel.findByIdAndDelete(id);
+export const deleteEmail = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const deleted = await EmailModel.findByIdAndDelete(id);
 
-    if (!deleted) {
-      return res.status(404).json({ message: "Email not found" });
-    }
-
-    res.status(200).json({ message: "Email deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting email:", error);
-    next(error);
+  if (!deleted) {
+    return notFoundResponse(res, "Email");
   }
-};
+
+  return successResponse(res, null, "Email deleted successfully");
+});

@@ -9,8 +9,14 @@ import errorHandler from "./src/middleware/errorHandler.js";
 import socketService from "./src/services/socketService.js";
 import setupProcessErrorHandlers from "./src/utils/processErrorHandlers.js";
 import { initRedis, closeRedis } from "./src/utils/redisClient.js";
+import { initializeUploadsDirectory, getUploadsPath } from "./src/utils/fileUpload.js";
+import { validateEnvironment } from "./src/utils/validateEnv.js";
+import path from "path";
 
 dotenv.config();
+
+// Validate environment variables before starting
+validateEnvironment();
 
 setupProcessErrorHandlers();
 
@@ -28,8 +34,56 @@ const onlineUsers = socketService.getOnlineUsers();
 export { io, onlineUsers };
 
 app.use(express.json());
-app.use(cors());
-app.use(helmet());
+
+// Configure CORS with whitelist
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+  : ['http://localhost:3000', 'http://localhost:3001'];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS policy`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'token'],
+  maxAge: 86400 // 24 hours
+}));
+
+// Configure Helmet with security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"]
+    }
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+// Initialize uploads directory structure
+initializeUploadsDirectory();
+
+// Serve static files from uploads directory
+app.use("/uploads", express.static(getUploadsPath()));
 
 ConnectDb();
 
@@ -52,7 +106,7 @@ app.use(
 app.use("/api/v1/TrustAccidentReport", indexRouter.TrustAccidentReportRouter);
 app.use("/api/v1/AhliaAccidentReport", indexRouter.AlAhliaAccidentRouter);
 app.use(
-  "/api/v1/PlestineAccidentReport",
+  "/api/v1/PalestineAccidentReport",
   indexRouter.PalestineAccidentReportRouter
 );
 app.use(

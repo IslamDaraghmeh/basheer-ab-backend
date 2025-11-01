@@ -1,51 +1,46 @@
-import { insuredModel } from "../../../../DB/models/Insured.model.js";
-import { userModel } from "../../../../DB/models/User.model.js";
-import InsuranceCompany from "../../../../DB/models/insuranceCompany.model.js";
-import { InsuranceTypeModel } from "../../../../DB/models/InsuranceType.model.js";
-import { ExpenseModel } from "../../../../DB/models/Expense.model.js";
-import { RevenueModel } from "../../../../DB/models/Revenue.model.js";
-import { accidentModel } from "../../../../DB/models/Accident.model.js";
-import AgentTransactionModel from "../../../../DB/models/AgentTransaction.model.js";
-import ChequeModel from "../../../../DB/models/Cheque.model.js";
-import DocumentSettings from "../../../../DB/models/DocumentSettings.model.js";
+import { insuredModel } from "#db/models/Insured.model.js";
+import { userModel } from "#db/models/User.model.js";
+import InsuranceCompany from "#db/models/insuranceCompany.model.js";
+import { InsuranceTypeModel } from "#db/models/InsuranceType.model.js";
+import { ExpenseModel } from "#db/models/Expense.model.js";
+import { RevenueModel } from "#db/models/Revenue.model.js";
+import { accidentModel } from "#db/models/Accident.model.js";
+import AgentTransactionModel from "#db/models/AgentTransaction.model.js";
+import ChequeModel from "#db/models/Cheque.model.js";
+import DocumentSettings from "#db/models/DocumentSettings.model.js";
+import AuditLogModel from "#db/models/AuditLog.model.js";
 
 import mongoose from "mongoose";
+import axios from "axios";
+
+// Notification services
 import {
   createNotification,
   sendNotificationLogic,
 } from "../../notification/controller/notification.controller.js";
-import AuditLogModel from "../../../../DB/models/AuditLog.model.js";
-import cloudinary from "../../../services/cloudinary.js";
-import axios from "axios";
-import { getPaginationParams, buildPaginatedResponse, getSortParams, SORT_FIELDS } from "../../../utils/pagination.js";
-import logger from "../../../utils/logService.js";
-import { invalidateAllRelatedCaches } from "../../../utils/cacheInvalidation.js";
 
-const logAudit = async ({
-  userId,
-  action,
-  entity,
-  entityId,
-  userName,
-  oldValue = null,
-  newValue = null,
-}) => {
-  try {
-    await AuditLogModel.create({
-      user: userId,
-      action,
-      entity,
-      entityId,
-      oldValue,
-      newValue,
-      userName,
-    });
-  } catch (error) {
-    logger.error("Failed to create audit log:", error);
-  }
-};
+// Utilities
+import { uploadToLocal } from "#utils/fileUpload.js";
+import { uploadMultipleFiles, uploadSingleFileWithDefault } from "#utils/fileUploadHelper.js";
+import { notifyAction } from "#utils/notificationHelper.js";
+import { getPaginationParams, buildPaginatedResponse, getSortParams, SORT_FIELDS } from "#utils/pagination.js";
+import logger from "#utils/logService.js";
+import { invalidateAllRelatedCaches } from "#utils/cacheInvalidation.js";
+import { asyncHandler } from "#utils/asyncHandler.js";
+import { logAudit } from "#utils/auditLogger.js";
+import {
+  successResponse,
+  createdResponse,
+  notFoundResponse,
+  badRequestResponse,
+  conflictResponse,
+  unauthorizedResponse,
+  errorResponse
+} from "#utils/apiResponse.js";
 
-export const addInsured = async (req, res, next) => {
+// Duplicate logAudit function removed - now using centralized version from #utils/auditLogger.js
+
+export const create = asyncHandler(async (req, res) => {
   const {
     first_name,
     last_name,
@@ -60,141 +55,117 @@ export const addInsured = async (req, res, next) => {
     birth_date,
   } = req.body;
 
-  try {
-    const findInsured = await insuredModel.findOne({ id_Number });
-    if (findInsured) {
-      return res.status(409).json({ message: "Insured already exists" });
-    }
-    let imageUrl = null;
-
-    if (req.file) {
-      const { secure_url } = await cloudinary.uploader.upload(req.file.path, {
-        folder: "Insured/image/",
-      });
-      imageUrl = secure_url;
-    } else {
-      imageUrl =
-        "https://th.bing.com/th/id/OIP.eUdZe6jPSNXtNAbxcswuIgHaE8?w=4245&h=2830&rs=1&pid=ImgDetMain";
-    }
-
-    const validVehicles =
-      vehicles && vehicles.length > 0
-        ? vehicles.map((vehicle) => ({
-            plateNumber: vehicle.plateNumber || "unknown",
-            model: vehicle.model,
-            type: vehicle.type,
-            ownership: vehicle.ownership,
-            modelNumber: vehicle.modelNumber,
-            licenseExpiry: vehicle.licenseExpiry,
-            lastTest: vehicle.lastTest,
-            color: vehicle.color,
-            price: vehicle.price,
-            image:
-              vehicle.image ||
-              "https://th.bing.com/th/id/OIP.eUdZe6jPSNXtNAbxcswuIgHaE8?w=4245&h=2830&rs=1&pid=ImgDetMain",
-            insurance: vehicle.insurance || [],
-          }))
-        : [];
-
-    let agent = null;
-    if (agentsName) {
-      agent = await userModel.findOne({ name: agentsName });
-    }
-
-    const newInsured = new insuredModel({
-      first_name,
-      last_name,
-      city,
-      id_Number,
-      phone_number,
-      ...(joining_date && { joining_date }), // Only include if provided
-      notes,
-      image: imageUrl,
-      vehicles: validVehicles,
-      agentsName: agentsName || null,
-      agentsId: agent ? agent._id : null,
-      email,
-      birth_date,
-    });
-
-    const savedInsured = await newInsured.save();
-    const findUser = await userModel.findById(req.user._id);
-    const message = `${findUser.name} added new insured: ${first_name} ${last_name}`;
-    await sendNotificationLogic({
-      senderId: req.user._id,
-      message,
-    });
-
-    await logAudit({
-      userId: req.user._id,
-      action: `Add Insured by ${findUser.name}`,
-      userName: findUser.name,
-      entity: "Insured",
-      entityId: savedInsured._id,
-      oldValue: null,
-      newValue: savedInsured.toObject(),
-    });
-
-    // Invalidate caches
-    invalidateAllRelatedCaches().catch(err => logger.error("Cache invalidation failed:", err));
-
-    return res
-      .status(201)
-      .json({ message: "Added successfully", savedInsured });
-  } catch (error) {
-    logger.error("Error adding insured:", error);
-    next(error);
+  const findInsured = await insuredModel.findOne({ id_Number });
+  if (findInsured) {
+    return conflictResponse(res, "Customer already exists");
   }
-};
+  const defaultImageUrl = "https://th.bing.com/th/id/OIP.eUdZe6jPSNXtNAbxcswuIgHaE8?w=4245&h=2830&rs=1&pid=ImgDetMain";
+  const imageUrl = await uploadSingleFileWithDefault(req.file, "insured", defaultImageUrl);
 
-export const deleteInsured = async (req, res, next) => {
-  try {
-    const { id } = req.params;
+  const validVehicles =
+    vehicles && vehicles.length > 0
+      ? vehicles.map((vehicle) => ({
+          plateNumber: vehicle.plateNumber || "unknown",
+          model: vehicle.model,
+          type: vehicle.type,
+          ownership: vehicle.ownership,
+          modelNumber: vehicle.modelNumber,
+          licenseExpiry: vehicle.licenseExpiry,
+          lastTest: vehicle.lastTest,
+          color: vehicle.color,
+          price: vehicle.price,
+          image: vehicle.image || defaultImageUrl,
+          insurance: vehicle.insurance || [],
+        }))
+      : [];
 
-    const findInsured = await insuredModel.findById(id);
-    if (!findInsured) {
-      return res.status(404).json({ message: "Insured not found" });
-    }
-
-    const deletedInsured = await insuredModel.findByIdAndDelete(id);
-    const findUser = await userModel.findById(req.user._id);
-
-    const message = `${findUser.name} deleted insured: ${findInsured.first_name} ${findInsured.last_name}`;
-    await sendNotificationLogic({
-      senderId: req.user._id,
-      message,
-    });
-    await logAudit({
-      userId: req.user._id,
-      action: `Delete Insured by ${findUser.name}`,
-      userName: findUser.name,
-      entity: "Insured",
-      entityId: deletedInsured._id,
-      oldValue: findInsured.toObject(),
-      newValue: null,
-    });
-
-    // Invalidate caches
-    invalidateAllRelatedCaches().catch(err => logger.error("Cache invalidation failed:", err));
-
-    return res.status(200).json({
-      message: "Deleted successfully",
-      deletedInsured,
-    });
-  } catch (error) {
-    next(error);
+  let agent = null;
+  if (agentsName) {
+    agent = await userModel.findOne({ name: agentsName });
   }
-};
 
-export const getTotalInsured = async (req, res, next) => {
-  try {
-    const total = await insuredModel.countDocuments();
-    return res.status(200).json({ totalCustomers: total });
-  } catch (error) {
-    logger.error("Error counting insureds:", error);
-    next(error);
+  const newInsured = new insuredModel({
+    first_name,
+    last_name,
+    city,
+    id_Number,
+    phone_number,
+    ...(joining_date && { joining_date }),
+    notes,
+    image: imageUrl,
+    vehicles: validVehicles,
+    agentsName: agentsName || null,
+    agentsId: agent ? agent._id : null,
+    email,
+    birth_date,
+  });
+
+  const savedInsured = await newInsured.save();
+
+  // Send notification using helper
+  await notifyAction(
+    req.user._id,
+    (userName, firstName, lastName) => `${userName} added new insured: ${firstName} ${lastName}`,
+    first_name,
+    last_name
+  );
+
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    action: `Add Insured by ${req.user.name}`,
+    userName: req.user.name,
+    entity: "Insured",
+    entityId: savedInsured._id,
+    oldValue: null,
+    newValue: savedInsured.toObject(),
+  });
+
+  // Invalidate caches
+  invalidateAllRelatedCaches().catch(err => logger.error("Cache invalidation failed:", err));
+
+  return createdResponse(res, { savedInsured }, "Customer added successfully");
+});
+
+export const remove = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const findInsured = await insuredModel.findById(id);
+  if (!findInsured) {
+    return notFoundResponse(res, "Customer");
   }
-};
+
+  const deletedInsured = await insuredModel.findByIdAndDelete(id);
+
+  // Send notification using helper
+  await notifyAction(
+    req.user._id,
+    (userName, firstName, lastName) => `${userName} deleted insured: ${firstName} ${lastName}`,
+    findInsured.first_name,
+    findInsured.last_name
+  );
+
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    action: `Delete Insured by ${req.user.name}`,
+    userName: req.user.name,
+    entity: "Insured",
+    entityId: deletedInsured._id,
+    oldValue: findInsured.toObject(),
+    newValue: null,
+  });
+
+  // Invalidate caches
+  invalidateAllRelatedCaches().catch(err => logger.error("Cache invalidation failed:", err));
+
+  return successResponse(res, { deletedInsured }, "Customer deleted successfully");
+});
+
+export const count = asyncHandler(async (req, res) => {
+  const total = await insuredModel.countDocuments();
+  return successResponse(res, { totalCustomers: total }, "Customer count retrieved successfully");
+});
 
 /**
  * Get All Vehicle Insurances with Filters
@@ -207,374 +178,324 @@ export const getTotalInsured = async (req, res, next) => {
  * @query {number} page - Page number for pagination (optional)
  * @query {number} limit - Number of items per page (optional)
  */
-export const getAllVehicleInsurances = async (req, res, next) => {
-  try {
-    const {
-      startDate,
-      endDate,
-      agent,
-      insuranceCompany,
-      insuranceType,
-      status = 'all'
-    } = req.query;
-    const { page, limit, skip } = getPaginationParams(req.query);
+export const getAllVehicleInsurances = asyncHandler(async (req, res) => {
+  const {
+    startDate,
+    endDate,
+    agent,
+    insuranceCompany,
+    insuranceType,
+    status = 'all'
+  } = req.query;
+  const { page, limit, skip } = getPaginationParams(req.query);
 
-    // Build match conditions
-    const matchConditions = {};
+  // Build match conditions
+  const matchConditions = {};
 
-    // Date range filter (for insurance start date)
-    if (startDate || endDate) {
-      matchConditions["vehicles.insurance.insuranceStartDate"] = {};
-      if (startDate) {
-        matchConditions["vehicles.insurance.insuranceStartDate"].$gte = new Date(startDate);
-      }
-      if (endDate) {
-        matchConditions["vehicles.insurance.insuranceStartDate"].$lte = new Date(endDate);
-      }
+  // Date range filter (for insurance start date)
+  if (startDate || endDate) {
+    matchConditions["vehicles.insurance.insuranceStartDate"] = {};
+    if (startDate) {
+      matchConditions["vehicles.insurance.insuranceStartDate"].$gte = new Date(startDate);
     }
-
-    // Agent filter
-    if (agent) {
-      matchConditions["vehicles.insurance.agent"] = agent;
+    if (endDate) {
+      matchConditions["vehicles.insurance.insuranceStartDate"].$lte = new Date(endDate);
     }
+  }
 
-    // Insurance company filter
-    if (insuranceCompany) {
-      matchConditions["vehicles.insurance.insuranceCompany"] = insuranceCompany;
+  // Agent filter
+  if (agent) {
+    matchConditions["vehicles.insurance.agent"] = agent;
+  }
+
+  // Insurance company filter
+  if (insuranceCompany) {
+    matchConditions["vehicles.insurance.insuranceCompany"] = insuranceCompany;
+  }
+
+  // Insurance type filter
+  if (insuranceType) {
+    matchConditions["vehicles.insurance.insuranceType"] = insuranceType;
+  }
+
+  // Status filter (active/expired)
+  if (status && status !== 'all') {
+    const now = new Date();
+    if (status === 'active') {
+      matchConditions["vehicles.insurance.insuranceEndDate"] = { $gte: now };
+    } else if (status === 'expired') {
+      matchConditions["vehicles.insurance.insuranceEndDate"] = { $lt: now };
     }
+  }
 
-    // Insurance type filter
-    if (insuranceType) {
-      matchConditions["vehicles.insurance.insuranceType"] = insuranceType;
-    }
-
-    // Status filter (active/expired)
-    if (status && status !== 'all') {
-      const now = new Date();
-      if (status === 'active') {
-        matchConditions["vehicles.insurance.insuranceEndDate"] = { $gte: now };
-      } else if (status === 'expired') {
-        matchConditions["vehicles.insurance.insuranceEndDate"] = { $lt: now };
-      }
-    }
-
-    const pipeline = [
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      ...(Object.keys(matchConditions).length > 0 ? [{ $match: matchConditions }] : []),
-      {
-        $project: {
-          _id: "$vehicles.insurance._id",
-          insuranceStartDate: "$vehicles.insurance.insuranceStartDate",
-          insuranceEndDate: "$vehicles.insurance.insuranceEndDate",
-          isUnder24: "$vehicles.insurance.isUnder24",
-          insuranceCategory: "$vehicles.insurance.insuranceCategory",
-          insuranceType: "$vehicles.insurance.insuranceType",
-          insuranceCompany: "$vehicles.insurance.insuranceCompany",
-          agent: "$vehicles.insurance.agent",
-          paymentMethod: "$vehicles.insurance.paymentMethod",
-          insuranceAmount: "$vehicles.insurance.insuranceAmount",
-          paidAmount: "$vehicles.insurance.paidAmount",
-          remainingDebt: "$vehicles.insurance.remainingDebt",
-          insuranceStatus: "$vehicles.insurance.insuranceStatus",
-          insuranceFiles: "$vehicles.insurance.insuranceFiles",
-          checkDetails: "$vehicles.insurance.checkDetails",
-          insuredId: "$_id",
-          insuredName: { $concat: ["$first_name", " ", "$last_name"] },
-          insuredIdNumber: "$id_Number",
-          insuredPhone: "$phone_number",
-          vehicleId: "$vehicles._id",
-          plateNumber: "$vehicles.plateNumber",
-          vehicleModel: "$vehicles.model",
-          vehicleType: "$vehicles.type",
-          vehicleOwnership: "$vehicles.ownership",
-          // Calculate if insurance is active or expired
-          isActive: {
-            $cond: {
-              if: { $gte: ["$vehicles.insurance.insuranceEndDate", new Date()] },
-              then: true,
-              else: false
-            }
+  const pipeline = [
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    ...(Object.keys(matchConditions).length > 0 ? [{ $match: matchConditions }] : []),
+    {
+      $project: {
+        _id: "$vehicles.insurance._id",
+        insuranceStartDate: "$vehicles.insurance.insuranceStartDate",
+        insuranceEndDate: "$vehicles.insurance.insuranceEndDate",
+        isUnder24: "$vehicles.insurance.isUnder24",
+        insuranceCategory: "$vehicles.insurance.insuranceCategory",
+        insuranceType: "$vehicles.insurance.insuranceType",
+        insuranceCompany: "$vehicles.insurance.insuranceCompany",
+        agent: "$vehicles.insurance.agent",
+        paymentMethod: "$vehicles.insurance.paymentMethod",
+        insuranceAmount: "$vehicles.insurance.insuranceAmount",
+        paidAmount: "$vehicles.insurance.paidAmount",
+        remainingDebt: "$vehicles.insurance.remainingDebt",
+        insuranceStatus: "$vehicles.insurance.insuranceStatus",
+        insuranceFiles: "$vehicles.insurance.insuranceFiles",
+        checkDetails: "$vehicles.insurance.checkDetails",
+        insuredId: "$_id",
+        insuredName: { $concat: ["$first_name", " ", "$last_name"] },
+        insuredIdNumber: "$id_Number",
+        insuredPhone: "$phone_number",
+        vehicleId: "$vehicles._id",
+        plateNumber: "$vehicles.plateNumber",
+        vehicleModel: "$vehicles.model",
+        vehicleType: "$vehicles.type",
+        vehicleOwnership: "$vehicles.ownership",
+        // Calculate if insurance is active or expired
+        isActive: {
+          $cond: {
+            if: { $gte: ["$vehicles.insurance.insuranceEndDate", new Date()] },
+            then: true,
+            else: false
           }
-        },
+        }
       },
-      { $sort: { insuranceEndDate: 1 } },
-    ];
+    },
+    { $sort: { insuranceEndDate: 1 } },
+  ];
 
-    const [allInsurances, countResult] = await Promise.all([
-      insuredModel.aggregate([...pipeline, { $skip: skip }, { $limit: limit }]),
-      insuredModel.aggregate([...pipeline, { $count: "total" }])
-    ]);
+  const [allInsurances, countResult] = await Promise.all([
+    insuredModel.aggregate([...pipeline, { $skip: skip }, { $limit: limit }]),
+    insuredModel.aggregate([...pipeline, { $count: "total" }])
+  ]);
 
-    const total = countResult.length > 0 ? countResult[0].total : 0;
-    const response = buildPaginatedResponse(allInsurances, total, page, limit);
+  const total = countResult.length > 0 ? countResult[0].total : 0;
+  const response = buildPaginatedResponse(allInsurances, total, page, limit);
 
-    // Calculate summary statistics
-    const summary = {
-      totalInsurances: total,
-      activeInsurances: allInsurances.filter(ins => ins.isActive).length,
-      expiredInsurances: allInsurances.filter(ins => !ins.isActive).length,
-      totalInsuranceAmount: allInsurances.reduce((sum, ins) => sum + (ins.insuranceAmount || 0), 0),
-      totalPaidAmount: allInsurances.reduce((sum, ins) => sum + (ins.paidAmount || 0), 0),
-      totalRemainingDebt: allInsurances.reduce((sum, ins) => sum + (ins.remainingDebt || 0), 0),
-    };
+  // Calculate summary statistics
+  const summary = {
+    totalInsurances: total,
+    activeInsurances: allInsurances.filter(ins => ins.isActive).length,
+    expiredInsurances: allInsurances.filter(ins => !ins.isActive).length,
+    totalInsuranceAmount: allInsurances.reduce((sum, ins) => sum + (ins.insuranceAmount || 0), 0),
+    totalPaidAmount: allInsurances.reduce((sum, ins) => sum + (ins.paidAmount || 0), 0),
+    totalRemainingDebt: allInsurances.reduce((sum, ins) => sum + (ins.remainingDebt || 0), 0),
+  };
 
-    return res.status(200).json({
-      message: "Vehicle insurances retrieved successfully",
-      timestamp: new Date().toISOString(),
-      filters: {
-        startDate: startDate || null,
-        endDate: endDate || null,
-        agent: agent || null,
-        insuranceCompany: insuranceCompany || null,
-        insuranceType: insuranceType || null,
-        status: status || 'all'
-      },
-      summary,
-      ...response,
-      insurances: response.data
-    });
-  } catch (error) {
-    logger.error("Error fetching all vehicle insurances:", error);
-    next(error);
+  return successResponse(res, {
+    timestamp: new Date().toISOString(),
+    filters: {
+      startDate: startDate || null,
+      endDate: endDate || null,
+      agent: agent || null,
+      insuranceCompany: insuranceCompany || null,
+      insuranceType: insuranceType || null,
+      status: status || 'all'
+    },
+    summary,
+    ...response,
+    insurances: response.data
+  }, "Vehicle insurances retrieved successfully");
+});
+
+export const list = asyncHandler(async (req, res) => {
+  const { page, limit, skip } = getPaginationParams(req.query);
+  const sort = getSortParams(req.query, '-createdAt', SORT_FIELDS.INSURED);
+
+  const [insuredList, total] = await Promise.all([
+    insuredModel.find({}).sort(sort).skip(skip).limit(limit).lean(),
+    insuredModel.countDocuments({})
+  ]);
+
+  const response = buildPaginatedResponse(insuredList, total, page, limit);
+  return successResponse(res, response, "Customers retrieved successfully");
+});
+
+export const getById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const insured = await insuredModel.findById(id);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const showAll = async (req, res, next) => {
-  try {
-    const { page, limit, skip } = getPaginationParams(req.query);
-    const sort = getSortParams(req.query, '-createdAt', SORT_FIELDS.INSURED);
-
-    const [insuredList, total] = await Promise.all([
-      insuredModel.find({}).sort(sort).skip(skip).limit(limit).lean(),
-      insuredModel.countDocuments({})
-    ]);
-
-    const response = buildPaginatedResponse(insuredList, total, page, limit);
-    return res.status(200).json({
-      message: "All Insured",
-      ...response
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const showById = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const insured = await insuredModel.findById(id);
-    if (!insured) return res.status(404).json({ message: "Insured not found" });
-
-    return res.status(200).json({ message: "Found Insured", insured });
-  } catch (error) {
-    next(error);
-  }
-};
+  return successResponse(res, { insured }, "Customer retrieved successfully");
+});
 
 /**
  * Search Customer by a single search key that matches Phone Number, Identity Number, or Vehicle Plate Number
  * @query {string} searchKey - Search value to match against phone number, identity number, or plate number
  */
-export const searchCustomer = async (req, res, next) => {
-  try {
-    const { searchKey } = req.query;
+export const searchCustomer = asyncHandler(async (req, res) => {
+  const { searchKey } = req.query;
 
-    // Ensure search key is provided
-    if (!searchKey || !searchKey.trim()) {
-      return res.status(400).json({
-        message: "Search key is required"
-      });
-    }
+  // Ensure search key is provided
+  if (!searchKey || !searchKey.trim()) {
+    return badRequestResponse(res, "Search key is required");
+  }
 
-    const trimmedSearchKey = searchKey.trim();
-    let customer = null;
-    let searchedBy = null;
-    let matchingVehicles = null;
+  const trimmedSearchKey = searchKey.trim();
+  let customer = null;
+  let searchedBy = null;
+  let matchingVehicles = null;
 
-    // Debug: Log search key details
-    logger.info(`Searching for customer with key: "${trimmedSearchKey}", length: ${trimmedSearchKey.length}, type: ${typeof trimmedSearchKey}`);
+  // Debug: Log search key details
+  logger.info(`Searching for customer with key: "${trimmedSearchKey}", length: ${trimmedSearchKey.length}, type: ${typeof trimmedSearchKey}`);
 
-    // Search by identity number (with type conversion)
-    // Note: Schema defines id_Number as String, but DB has Numbers stored
-    // Use aggregation to bypass Mongoose schema type conversion
-    const idSearchAsNumber = !isNaN(trimmedSearchKey) ? Number(trimmedSearchKey) : null;
+  // Search by identity number (with type conversion)
+  // Note: Schema defines id_Number as String, but DB has Numbers stored
+  // Use aggregation to bypass Mongoose schema type conversion
+  const idSearchAsNumber = !isNaN(trimmedSearchKey) ? Number(trimmedSearchKey) : null;
 
-    // Use aggregation to search both string and number types
-    const idResults = await insuredModel.aggregate([
-      {
-        $match: {
-          $or: [
-            { id_Number: trimmedSearchKey },
-            { id_Number: String(trimmedSearchKey) },
-            ...(idSearchAsNumber !== null ? [{ id_Number: idSearchAsNumber }] : [])
-          ]
-        }
-      },
-      { $limit: 1 }
-    ]);
+  // Use aggregation to search both string and number types
+  const idResults = await insuredModel.aggregate([
+    {
+      $match: {
+        $or: [
+          { id_Number: trimmedSearchKey },
+          { id_Number: String(trimmedSearchKey) },
+          ...(idSearchAsNumber !== null ? [{ id_Number: idSearchAsNumber }] : [])
+        ]
+      }
+    },
+    { $limit: 1 }
+  ]);
 
-    customer = idResults.length > 0 ? idResults[0] : null;
+  customer = idResults.length > 0 ? idResults[0] : null;
 
-    logger.info(`ID Search result for "${trimmedSearchKey}": ${customer ? 'FOUND' : 'NOT FOUND'}`);
+  logger.info(`ID Search result for "${trimmedSearchKey}": ${customer ? 'FOUND' : 'NOT FOUND'}`);
 
-    // Debug log
-    if (customer) {
-      logger.info(`Found customer by id_Number. Customer id_Number: "${customer.id_Number}", type: ${typeof customer.id_Number}`);
-    }
+  // Debug log
+  if (customer) {
+    logger.info(`Found customer by id_Number. Customer id_Number: "${customer.id_Number}", type: ${typeof customer.id_Number}`);
+  }
 
-    if (customer) {
-      searchedBy = "id_Number";
-      return res.status(200).json({
-        message: "Customer found by identity number",
-        customer,
-        searchedBy,
-        searchKey: trimmedSearchKey
-      });
-    }
+  if (customer) {
+    searchedBy = "id_Number";
+    return successResponse(res, {
+      customer,
+      searchedBy,
+      searchKey: trimmedSearchKey
+    }, "Customer found by identity number");
+  }
 
-    // Search by phone number (with type conversion)
-    const phoneSearchAsNumber = !isNaN(trimmedSearchKey) ? Number(trimmedSearchKey) : null;
+  // Search by phone number (with type conversion)
+  const phoneSearchAsNumber = !isNaN(trimmedSearchKey) ? Number(trimmedSearchKey) : null;
 
-    // Use aggregation to search both string and number types
-    const phoneResults = await insuredModel.aggregate([
-      {
-        $match: {
-          $or: [
-            { phone_number: trimmedSearchKey },
-            { phone_number: String(trimmedSearchKey) },
-            ...(phoneSearchAsNumber !== null ? [{ phone_number: phoneSearchAsNumber }] : [])
-          ]
-        }
-      },
-      { $limit: 1 }
-    ]);
+  // Use aggregation to search both string and number types
+  const phoneResults = await insuredModel.aggregate([
+    {
+      $match: {
+        $or: [
+          { phone_number: trimmedSearchKey },
+          { phone_number: String(trimmedSearchKey) },
+          ...(phoneSearchAsNumber !== null ? [{ phone_number: phoneSearchAsNumber }] : [])
+        ]
+      }
+    },
+    { $limit: 1 }
+  ]);
 
-    customer = phoneResults.length > 0 ? phoneResults[0] : null;
+  customer = phoneResults.length > 0 ? phoneResults[0] : null;
 
-    if (customer) {
-      logger.info(`Found customer by phone_number. Customer phone: "${customer.phone_number}", type: ${typeof customer.phone_number}`);
-      searchedBy = "phone_number";
-      return res.status(200).json({
-        message: "Customer found by phone number",
-        customer,
-        searchedBy,
-        searchKey: trimmedSearchKey
-      });
-    }
+  if (customer) {
+    logger.info(`Found customer by phone_number. Customer phone: "${customer.phone_number}", type: ${typeof customer.phone_number}`);
+    searchedBy = "phone_number";
+    return successResponse(res, {
+      customer,
+      searchedBy,
+      searchKey: trimmedSearchKey
+    }, "Customer found by phone number");
+  }
 
-    // Search by vehicle plate number (with type conversion - exact match)
-    const searchAsNumber = !isNaN(trimmedSearchKey) ? Number(trimmedSearchKey) : null;
+  // Search by vehicle plate number (with type conversion - exact match)
+  const searchAsNumber = !isNaN(trimmedSearchKey) ? Number(trimmedSearchKey) : null;
 
-    // Use aggregation to search both string and number types
-    const plateResults = await insuredModel.aggregate([
-      {
-        $match: {
-          $or: [
-            { "vehicles.plateNumber": trimmedSearchKey },
-            { "vehicles.plateNumber": String(trimmedSearchKey) },
-            ...(searchAsNumber !== null ? [{ "vehicles.plateNumber": searchAsNumber }] : [])
-          ]
-        }
-      },
-      { $limit: 1 }
-    ]);
+  // Use aggregation to search both string and number types
+  const plateResults = await insuredModel.aggregate([
+    {
+      $match: {
+        $or: [
+          { "vehicles.plateNumber": trimmedSearchKey },
+          { "vehicles.plateNumber": String(trimmedSearchKey) },
+          ...(searchAsNumber !== null ? [{ "vehicles.plateNumber": searchAsNumber }] : [])
+        ]
+      }
+    },
+    { $limit: 1 }
+  ]);
 
-    customer = plateResults.length > 0 ? plateResults[0] : null;
+  customer = plateResults.length > 0 ? plateResults[0] : null;
 
-    if (customer) {
-      logger.info(`Found customer by plateNumber (exact match).`);
-      searchedBy = "plateNumber";
-      // Filter to show only the matching vehicle(s)
-      matchingVehicles = customer.vehicles.filter(
-        v => v.plateNumber && String(v.plateNumber) === String(trimmedSearchKey)
-      );
+  if (customer) {
+    logger.info(`Found customer by plateNumber (exact match).`);
+    searchedBy = "plateNumber";
+    // Filter to show only the matching vehicle(s)
+    matchingVehicles = customer.vehicles.filter(
+      v => v.plateNumber && String(v.plateNumber) === String(trimmedSearchKey)
+    );
 
-      return res.status(200).json({
-        message: "Customer found by vehicle plate number",
-        customer,
-        matchingVehicles,
-        searchedBy,
-        searchKey: trimmedSearchKey
-      });
-    }
+    return successResponse(res, {
+      customer,
+      matchingVehicles,
+      searchedBy,
+      searchKey: trimmedSearchKey
+    }, "Customer found by vehicle plate number");
+  }
 
-    // If no exact match, try partial match on plate number (contains)
-    // For numeric searches, we also check if the plate number (as string) contains the search key
-    const plateNumberAsNumber = !isNaN(trimmedSearchKey) ? Number(trimmedSearchKey) : null;
+  // If no exact match, try partial match on plate number (contains)
+  // For numeric searches, we also check if the plate number (as string) contains the search key
+  const plateNumberAsNumber = !isNaN(trimmedSearchKey) ? Number(trimmedSearchKey) : null;
 
-    // Find customers where any vehicle's plate number contains the search key
-    const allCustomers = await insuredModel.find({
-      'vehicles.0': { $exists: true }
-    }).lean();
+  // Find customers where any vehicle's plate number contains the search key
+  const allCustomers = await insuredModel.find({
+    'vehicles.0': { $exists: true }
+  }).lean();
 
-    customer = allCustomers.find(c => {
-      return c.vehicles && c.vehicles.some(v => {
+  customer = allCustomers.find(c => {
+    return c.vehicles && c.vehicles.some(v => {
+      const plateStr = String(v.plateNumber);
+      return plateStr.includes(trimmedSearchKey);
+    });
+  });
+
+  if (customer) {
+    logger.info(`Found customer by plateNumber (partial match).`);
+    searchedBy = "plateNumber_partial";
+    // Filter to show only the matching vehicle(s)
+    matchingVehicles = customer.vehicles.filter(
+      v => {
         const plateStr = String(v.plateNumber);
         return plateStr.includes(trimmedSearchKey);
-      });
-    });
-
-    if (customer) {
-      logger.info(`Found customer by plateNumber (partial match).`);
-      searchedBy = "plateNumber_partial";
-      // Filter to show only the matching vehicle(s)
-      matchingVehicles = customer.vehicles.filter(
-        v => {
-          const plateStr = String(v.plateNumber);
-          return plateStr.includes(trimmedSearchKey);
-        }
-      );
-
-      return res.status(200).json({
-        message: "Customer found by vehicle plate number (partial match)",
-        customer,
-        matchingVehicles,
-        searchedBy,
-        searchKey: trimmedSearchKey
-      });
-    }
-
-    // Debug: Sample some customers to see their data structure
-    const sampleCustomers = await insuredModel.find({ 'vehicles.0': { $exists: true } }).limit(5).select('id_Number phone_number first_name last_name vehicles.plateNumber').lean();
-    logger.info(`Sample customers in DB:`, JSON.stringify(sampleCustomers, null, 2));
-
-    // No customer found
-    return res.status(404).json({
-      message: "No customer found with the provided search key",
-      searchKey: trimmedSearchKey,
-      debug: {
-        searchKeyLength: trimmedSearchKey.length,
-        searchKeyType: typeof trimmedSearchKey,
-        sampleCustomers: sampleCustomers.map(c => ({
-          name: `${c.first_name} ${c.last_name}`,
-          id_Number: c.id_Number,
-          id_Number_type: typeof c.id_Number,
-          phone_number: c.phone_number,
-          phone_number_type: typeof c.phone_number,
-          vehicles: c.vehicles ? c.vehicles.map(v => ({
-            plateNumber: v.plateNumber,
-            plateNumber_type: typeof v.plateNumber
-          })) : []
-        }))
       }
-    });
+    );
 
-  } catch (error) {
-    logger.error("Error searching for customer:", error);
-    next(error);
+    return successResponse(res, {
+      customer,
+      matchingVehicles,
+      searchedBy,
+      searchKey: trimmedSearchKey
+    }, "Customer found by vehicle plate number (partial match)");
   }
-};
 
-export const getTotalInsuredCount = async (req, res, next) => {
-  try {
-    const total = await insuredModel.countDocuments();
-    res.status(200).json({ total });
-  } catch (error) {
-    logger.error("Error getting total insured count:", error);
-    next(error);
-  }
-};
+  // Debug: Sample some customers to see their data structure
+  const sampleCustomers = await insuredModel.find({ 'vehicles.0': { $exists: true } }).limit(5).select('id_Number phone_number first_name last_name vehicles.plateNumber').lean();
+  logger.info(`Sample customers in DB:`, JSON.stringify(sampleCustomers, null, 2));
+
+  // No customer found
+  return notFoundResponse(res, "Customer with the provided search key");
+});
+
+export const getTotalInsuredCount = asyncHandler(async (req, res) => {
+  const total = await insuredModel.countDocuments();
+  return successResponse(res, { total }, "Total customer count retrieved successfully");
+});
 
 /**
  * Customers Overview Endpoint
@@ -582,191 +503,182 @@ export const getTotalInsuredCount = async (req, res, next) => {
  * @query {string} period - 'monthly', 'quarterly', or 'yearly' (default: 'monthly')
  * @query {number} year - Year to filter (default: current year)
  */
-export const getCustomersOverview = async (req, res, next) => {
-  try {
-    const { period = 'monthly', year } = req.query;
-    const targetYear = year ? parseInt(year) : new Date().getFullYear();
+export const getCustomersOverview = asyncHandler(async (req, res) => {
+  const { period = 'monthly', year } = req.query;
+  const targetYear = year ? parseInt(year) : new Date().getFullYear();
 
-    // Validate period
-    if (!['monthly', 'quarterly', 'yearly'].includes(period)) {
-      return res.status(400).json({
-        message: "Invalid period. Must be 'monthly', 'quarterly', or 'yearly'"
+  // Validate period
+  if (!['monthly', 'quarterly', 'yearly'].includes(period)) {
+    return badRequestResponse(res, "Invalid period. Must be 'monthly', 'quarterly', or 'yearly'");
+  }
+
+  let customersData = {};
+
+  if (period === 'monthly') {
+    // Monthly breakdown for the specified year
+    const monthlyData = await insuredModel.aggregate([
+      {
+        $match: {
+          joining_date: { $exists: true, $ne: null }
+        }
+      },
+      {
+        $project: {
+          year: { $year: "$joining_date" },
+          month: { $month: "$joining_date" }
+        }
+      },
+      {
+        $match: {
+          year: targetYear
+        }
+      },
+      {
+        $group: {
+          _id: { year: "$year", month: "$month" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id.month": 1 } }
+    ]);
+
+    // Create array with all 12 months
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthlyResult = [];
+
+    for (let month = 1; month <= 12; month++) {
+      const data = monthlyData.find(item => item._id.month === month);
+      monthlyResult.push({
+        period: monthNames[month - 1],
+        month: month,
+        year: targetYear,
+        customers: data ? data.count : 0
       });
     }
 
-    let customersData = {};
-
-    if (period === 'monthly') {
-      // Monthly breakdown for the specified year
-      const monthlyData = await insuredModel.aggregate([
-        {
-          $match: {
-            joining_date: { $exists: true, $ne: null }
-          }
-        },
-        {
-          $project: {
-            year: { $year: "$joining_date" },
-            month: { $month: "$joining_date" }
-          }
-        },
-        {
-          $match: {
-            year: targetYear
-          }
-        },
-        {
-          $group: {
-            _id: { year: "$year", month: "$month" },
-            count: { $sum: 1 }
-          }
-        },
-        { $sort: { "_id.month": 1 } }
-      ]);
-
-      // Create array with all 12 months
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthlyResult = [];
-
-      for (let month = 1; month <= 12; month++) {
-        const data = monthlyData.find(item => item._id.month === month);
-        monthlyResult.push({
-          period: monthNames[month - 1],
-          month: month,
-          year: targetYear,
-          customers: data ? data.count : 0
-        });
+    customersData = {
+      period: 'monthly',
+      year: targetYear,
+      data: monthlyResult,
+      summary: {
+        totalCustomers: monthlyResult.reduce((sum, item) => sum + item.customers, 0)
       }
+    };
 
-      customersData = {
-        period: 'monthly',
-        year: targetYear,
-        data: monthlyResult,
-        summary: {
-          totalCustomers: monthlyResult.reduce((sum, item) => sum + item.customers, 0)
+  } else if (period === 'quarterly') {
+    // Quarterly breakdown for the specified year
+    const quarterlyData = await insuredModel.aggregate([
+      {
+        $match: {
+          joining_date: { $exists: true, $ne: null }
         }
-      };
-
-    } else if (period === 'quarterly') {
-      // Quarterly breakdown for the specified year
-      const quarterlyData = await insuredModel.aggregate([
-        {
-          $match: {
-            joining_date: { $exists: true, $ne: null }
-          }
-        },
-        {
-          $project: {
-            year: { $year: "$joining_date" },
-            quarter: {
-              $ceil: {
-                $divide: [{ $month: "$joining_date" }, 3]
-              }
+      },
+      {
+        $project: {
+          year: { $year: "$joining_date" },
+          quarter: {
+            $ceil: {
+              $divide: [{ $month: "$joining_date" }, 3]
             }
           }
-        },
-        {
-          $match: {
-            year: targetYear
-          }
-        },
-        {
-          $group: {
-            _id: { year: "$year", quarter: "$quarter" },
-            count: { $sum: 1 }
-          }
-        },
-        { $sort: { "_id.quarter": 1 } }
-      ]);
+        }
+      },
+      {
+        $match: {
+          year: targetYear
+        }
+      },
+      {
+        $group: {
+          _id: { year: "$year", quarter: "$quarter" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id.quarter": 1 } }
+    ]);
 
-      // Create array with all 4 quarters
-      const quarterNames = ['Q1', 'Q2', 'Q3', 'Q4'];
-      const quarterlyResult = [];
+    // Create array with all 4 quarters
+    const quarterNames = ['Q1', 'Q2', 'Q3', 'Q4'];
+    const quarterlyResult = [];
 
-      for (let quarter = 1; quarter <= 4; quarter++) {
-        const data = quarterlyData.find(item => item._id.quarter === quarter);
-        quarterlyResult.push({
-          period: quarterNames[quarter - 1],
-          quarter: quarter,
-          year: targetYear,
-          customers: data ? data.count : 0
-        });
-      }
-
-      customersData = {
-        period: 'quarterly',
+    for (let quarter = 1; quarter <= 4; quarter++) {
+      const data = quarterlyData.find(item => item._id.quarter === quarter);
+      quarterlyResult.push({
+        period: quarterNames[quarter - 1],
+        quarter: quarter,
         year: targetYear,
-        data: quarterlyResult,
-        summary: {
-          totalCustomers: quarterlyResult.reduce((sum, item) => sum + item.customers, 0)
-        }
-      };
-
-    } else if (period === 'yearly') {
-      // Yearly breakdown (last 5 years)
-      const currentYear = new Date().getFullYear();
-      const startYear = currentYear - 4;
-
-      const yearlyData = await insuredModel.aggregate([
-        {
-          $match: {
-            joining_date: { $exists: true, $ne: null }
-          }
-        },
-        {
-          $project: {
-            year: { $year: "$joining_date" }
-          }
-        },
-        {
-          $match: {
-            year: { $gte: startYear, $lte: currentYear }
-          }
-        },
-        {
-          $group: {
-            _id: { year: "$year" },
-            count: { $sum: 1 }
-          }
-        },
-        { $sort: { "_id.year": 1 } }
-      ]);
-
-      // Create array with last 5 years
-      const yearlyResult = [];
-
-      for (let year = startYear; year <= currentYear; year++) {
-        const data = yearlyData.find(item => item._id.year === year);
-        yearlyResult.push({
-          period: year.toString(),
-          year: year,
-          customers: data ? data.count : 0
-        });
-      }
-
-      customersData = {
-        period: 'yearly',
-        yearRange: `${startYear}-${currentYear}`,
-        data: yearlyResult,
-        summary: {
-          totalCustomers: yearlyResult.reduce((sum, item) => sum + item.customers, 0)
-        }
-      };
+        customers: data ? data.count : 0
+      });
     }
 
-    return res.status(200).json({
-      message: "Customers overview retrieved successfully",
-      timestamp: new Date().toISOString(),
-      ...customersData
-    });
+    customersData = {
+      period: 'quarterly',
+      year: targetYear,
+      data: quarterlyResult,
+      summary: {
+        totalCustomers: quarterlyResult.reduce((sum, item) => sum + item.customers, 0)
+      }
+    };
 
-  } catch (error) {
-    logger.error("Error getting customers overview:", error);
-    next(error);
+  } else if (period === 'yearly') {
+    // Yearly breakdown (last 5 years)
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 4;
+
+    const yearlyData = await insuredModel.aggregate([
+      {
+        $match: {
+          joining_date: { $exists: true, $ne: null }
+        }
+      },
+      {
+        $project: {
+          year: { $year: "$joining_date" }
+        }
+      },
+      {
+        $match: {
+          year: { $gte: startYear, $lte: currentYear }
+        }
+      },
+      {
+        $group: {
+          _id: { year: "$year" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id.year": 1 } }
+    ]);
+
+    // Create array with last 5 years
+    const yearlyResult = [];
+
+    for (let year = startYear; year <= currentYear; year++) {
+      const data = yearlyData.find(item => item._id.year === year);
+      yearlyResult.push({
+        period: year.toString(),
+        year: year,
+        customers: data ? data.count : 0
+      });
+    }
+
+    customersData = {
+      period: 'yearly',
+      yearRange: `${startYear}-${currentYear}`,
+      data: yearlyResult,
+      summary: {
+        totalCustomers: yearlyResult.reduce((sum, item) => sum + item.customers, 0)
+      }
+    };
   }
-};
 
-export const updateInsured = async (req, res, next) => {
+  return successResponse(res, {
+    timestamp: new Date().toISOString(),
+    ...customersData
+  }, "Customers overview retrieved successfully");
+});
+
+export const update = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
     first_name,
@@ -779,169 +691,149 @@ export const updateInsured = async (req, res, next) => {
     birth_date,
   } = req.body;
 
-  try {
-    const insured = await insuredModel.findById(id);
-    if (!insured) {
-      return res.status(409).json({ message: "Insured not found" });
-    }
-
-    const oldValue = insured.toObject();
-
-    let updatedData = {
-      first_name,
-      last_name,
-      id_Number,
-      phone_number,
-      joining_date,
-      notes,
-      city,
-      birth_date,
-    };
-
-    if (req.file) {
-      const { secure_url } = await cloudinary.uploader.upload(req.file.path, {
-        folder: "Insured/image/",
-      });
-      updatedData.image = secure_url;
-    }
-
-    const updatedInsured = await insuredModel.findByIdAndUpdate(
-      id,
-      updatedData,
-      {
-        new: true,
-      }
-    );
-
-    const findUser = await userModel.findById(req.user._id);
-    await logAudit({
-      userId: req.user._id,
-      action: `Update insured by ${findUser.name}`,
-      userName: findUser.name,
-      entity: "Insured",
-      entityId: updatedInsured._id,
-      oldValue,
-      newValue: updatedInsured.toObject(),
-    });
-
-    return res.status(200).json({
-      message: "Updated successfully",
-      updatedInsured,
-    });
-  } catch (error) {
-    next(error);
+  const insured = await insuredModel.findById(id);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const addVehicle = async (req, res, next) => {
-  try {
-    const { insuredId } = req.params;
-    const {
-      plateNumber,
-      model,
-      type,
-      ownership,
-      modelNumber,
-      licenseExpiry,
-      lastTest,
-      color,
-      price,
-    } = req.body;
+  const oldValue = insured.toObject();
 
-    let secure_url = "";
-    if (req.file) {
-      const { secure_url: uploadedUrl } = await cloudinary.uploader.upload(
-        req.file.path,
-        {
-          folder: "Vehicles/image/",
-        }
-      );
-      secure_url = uploadedUrl;
-    }
+  let updatedData = {
+    first_name,
+    last_name,
+    id_Number,
+    phone_number,
+    joining_date,
+    notes,
+    city,
+    birth_date,
+  };
 
-    const newVehicle = {
-      plateNumber: plateNumber || "unknown",
-      model,
-      type,
-      ownership,
-      modelNumber,
-      licenseExpiry,
-      lastTest,
-      color,
-      price,
-      image: secure_url,
-      insurance: [],
-    };
-
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) return res.status(404).json({ message: "Insured not found" });
-
-    insured.vehicles.push(newVehicle);
-    await insured.save({ validateBeforeSave: false });
-
-    const findUser = await userModel.findById(req.user._id);
-    const message = `${findUser.name} added new car, plate number: ${plateNumber}`;
-    await sendNotificationLogic({
-      senderId: req.user._id,
-      message,
-    });
-
-    await logAudit({
-      userId: req.user._id,
-      userName: findUser.name,
-      action: `Added new vehicle by ${findUser.name}`,
-      entity: "Vehicle",
-      entityId: insuredId,
-      oldValue: null,
-      newValue: newVehicle,
-    });
-
-    return res.status(200).json({ message: "Vehicle added successfully" });
-  } catch (error) {
-    next(error);
+  if (req.file) {
+    const imageUrl = await uploadSingleFileWithDefault(req.file, "insured", insured.image);
+    updatedData.image = imageUrl;
   }
-};
 
-export const removeVehicle = async (req, res, next) => {
-  try {
-    const { insuredId, vehicleId } = req.params;
+  const updatedInsured = await insuredModel.findByIdAndUpdate(
+    id,
+    updatedData,
+    { new: true }
+  );
 
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) return res.status(404).json({ message: "Insured not found" });
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    action: `Update insured by ${req.user.name}`,
+    userName: req.user.name,
+    entity: "Insured",
+    entityId: updatedInsured._id,
+    oldValue,
+    newValue: updatedInsured.toObject(),
+  });
 
-    const vehicleToRemove = insured.vehicles.find(
-      (v) => v._id.toString() === vehicleId
-    );
+  return successResponse(res, { updatedInsured }, "Customer updated successfully");
+});
 
-    if (!vehicleToRemove)
-      return res.status(404).json({ message: "Vehicle not found" });
+export const createVehicle = asyncHandler(async (req, res) => {
+  const { insuredId } = req.params;
+  const {
+    plateNumber,
+    model,
+    type,
+    ownership,
+    modelNumber,
+    licenseExpiry,
+    lastTest,
+    color,
+    price,
+  } = req.body;
 
-    insured.vehicles.pull({ _id: vehicleId });
-    await insured.save();
-    const findUser = await userModel.findById(req.user._id);
-    const message = `${findUser.name} deleted vehicle with plate number: ${vehicleToRemove.plateNumber}`;
-    await sendNotificationLogic({
-      senderId: req.user._id,
-      message,
-    });
+  const imageUrl = await uploadSingleFileWithDefault(req.file, "vehicles", "");
 
-    await logAudit({
-      userId: req.user._id,
-      userName: findUser.name,
-      action: `delete vehicles by ${findUser.name}`,
-      entity: "Vehicle",
-      entityId: insuredId,
-      oldValue: vehicleToRemove,
-      newValue: null,
-    });
+  const newVehicle = {
+    plateNumber: plateNumber || "unknown",
+    model,
+    type,
+    ownership,
+    modelNumber,
+    licenseExpiry,
+    lastTest,
+    color,
+    price,
+    image: imageUrl,
+    insurance: [],
+  };
 
-    return res.status(200).json({ message: "Vehicle deleted successfully" });
-  } catch (error) {
-    next(error);
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const updateVehicle = async (req, res, next) => {
+  insured.vehicles.push(newVehicle);
+  await insured.save({ validateBeforeSave: false });
+
+  // Send notification using helper
+  await notifyAction(
+    req.user._id,
+    (userName, plate) => `${userName} added new car, plate number: ${plate}`,
+    plateNumber
+  );
+
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    userName: req.user.name,
+    action: `Added new vehicle by ${req.user.name}`,
+    entity: "Vehicle",
+    entityId: insuredId,
+    oldValue: null,
+    newValue: newVehicle,
+  });
+
+  return successResponse(res, null, "Vehicle added successfully");
+});
+
+export const deleteVehicle = asyncHandler(async (req, res) => {
+  const { insuredId, vehicleId } = req.params;
+
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
+  }
+
+  const vehicleToRemove = insured.vehicles.find(
+    (v) => v._id.toString() === vehicleId
+  );
+
+  if (!vehicleToRemove) {
+    return notFoundResponse(res, "Vehicle");
+  }
+
+  insured.vehicles.pull({ _id: vehicleId });
+  await insured.save();
+
+  // Send notification using helper
+  await notifyAction(
+    req.user._id,
+    (userName, plate) => `${userName} deleted vehicle with plate number: ${plate}`,
+    vehicleToRemove.plateNumber
+  );
+
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    userName: req.user.name,
+    action: `delete vehicles by ${req.user.name}`,
+    entity: "Vehicle",
+    entityId: insuredId,
+    oldValue: vehicleToRemove,
+    newValue: null,
+  });
+
+  return successResponse(res, null, "Vehicle deleted successfully");
+});
+
+export const updateVehicle = asyncHandler(async (req, res) => {
   const { insuredId, vehicleId } = req.params;
   const {
     plateNumber,
@@ -955,185 +847,153 @@ export const updateVehicle = async (req, res, next) => {
     price,
   } = req.body;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) {
-      return res.status(404).json({ message: "Insured not found" });
-    }
-
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) {
-      return res.status(404).json({ message: "Vehicle not found" });
-    }
-
-    const oldValue = { ...vehicle._doc };
-
-    vehicle.plateNumber = plateNumber || vehicle.plateNumber;
-    vehicle.model = model || vehicle.model;
-    vehicle.type = type || vehicle.type;
-    vehicle.ownership = ownership || vehicle.ownership;
-    vehicle.modelNumber = modelNumber || vehicle.modelNumber;
-    vehicle.licenseExpiry = licenseExpiry || vehicle.licenseExpiry;
-    vehicle.lastTest = lastTest || vehicle.lastTest;
-    vehicle.color = color || vehicle.color;
-    vehicle.price = price || vehicle.price;
-
-    await insured.save();
-
-    const newValue = { ...vehicle._doc };
-    const findUser = await userModel.findById(req.user._id);
-
-    await logAudit({
-      userId: req.user._id,
-      userName: findUser.name,
-
-      action: `Update vehicle by ${findUser.name}`,
-      entity: "Vehicle",
-      entityId: insuredId,
-      oldValue,
-      newValue,
-    });
-
-    return res.status(200).json({ message: "Vehicle updated successfully" });
-  } catch (error) {
-    logger.error(error);
-    next(error);
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const showVehicles = async (req, res) => {
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) {
+    return notFoundResponse(res, "Vehicle");
+  }
+
+  const oldValue = { ...vehicle._doc };
+
+  vehicle.plateNumber = plateNumber || vehicle.plateNumber;
+  vehicle.model = model || vehicle.model;
+  vehicle.type = type || vehicle.type;
+  vehicle.ownership = ownership || vehicle.ownership;
+  vehicle.modelNumber = modelNumber || vehicle.modelNumber;
+  vehicle.licenseExpiry = licenseExpiry || vehicle.licenseExpiry;
+  vehicle.lastTest = lastTest || vehicle.lastTest;
+  vehicle.color = color || vehicle.color;
+  vehicle.price = price || vehicle.price;
+
+  await insured.save();
+
+  const newValue = { ...vehicle._doc };
+
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    userName: req.user.name,
+    action: `Update vehicle by ${req.user.name}`,
+    entity: "Vehicle",
+    entityId: insuredId,
+    oldValue,
+    newValue,
+  });
+
+  return successResponse(res, null, "Vehicle updated successfully");
+});
+
+export const listVehicles = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  try {
-    const insured = await insuredModel.findById(id).select("vehicles");
+  const insured = await insuredModel.findById(id).select("vehicles");
 
-    if (!insured) {
-      return res.status(404).json({ message: "Insured not found" });
-    }
-
-    return res.status(200).json({ vehicles: insured.vehicles });
-  } catch (error) {
-    logger.error(error);
-
-    next(error);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const getTotalVehicles = async (req, res, next) => {
-  try {
-    const result = await insuredModel.aggregate([
-      { $unwind: "$vehicles" },
-      { $count: "totalVehicles" },
-    ]);
+  return successResponse(res, { vehicles: insured.vehicles }, "Vehicles retrieved successfully");
+});
 
-    const total = result.length > 0 ? result[0].totalVehicles : 0;
+export const countVehicles = asyncHandler(async (req, res) => {
+  const result = await insuredModel.aggregate([
+    { $unwind: "$vehicles" },
+    { $count: "totalVehicles" },
+  ]);
 
-    return res.status(200).json({ totalVehicles: total });
-  } catch (error) {
-    logger.error("Error counting vehicles:", error);
-    next(error);
+  const total = result.length > 0 ? result[0].totalVehicles : 0;
+
+  return successResponse(res, { totalVehicles: total }, "Vehicle count retrieved successfully");
+});
+
+export const uploadCustomerFiles = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const insured = await insuredModel.findById(id);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const uploadCustomerFiles = async (req, res, next) => {
-  try {
-    const { id } = req.params;
+  // Upload all files using the helper
+  const fileUrls = await uploadMultipleFiles(req.files, "insured");
 
-    const insured = await insuredModel.findById(id);
-    if (!insured)
-      return res.status(404).json({ message: "Customer not found" });
+  // Map uploaded URLs to file objects
+  const uploadedFiles = req.files.map((file, index) => ({
+    fileName: file.originalname,
+    fileUrl: fileUrls[index],
+  }));
 
-    let uploadedFiles = [];
+  insured.attachments.push(...uploadedFiles);
+  await insured.save();
 
-    for (let file of req.files) {
-      const { secure_url } = await cloudinary.uploader.upload(file.path, {
-        folder: `Insured/${id}/attachments`,
-      });
+  return successResponse(res, { attachments: insured.attachments }, "Files uploaded successfully");
+});
 
-      uploadedFiles.push({
-        fileName: file.originalname,
-        fileUrl: secure_url,
-      });
-    }
-
-    insured.attachments.push(...uploadedFiles);
-    await insured.save();
-
-    return res.status(200).json({
-      message: "Files uploaded successfully",
-      attachments: insured.attachments,
-    });
-  } catch (error) {
-    logger.error("Error uploading customer files:", error);
-    next(error);
-  }
-};
-
-export const removeInsuranceFromVehicle = async (req, res, next) => {
+export const deleteInsurance = asyncHandler(async (req, res) => {
   const { insuredId, vehicleId, insuranceId } = req.params;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) {
-      return res.status(404).json({ message: "Insured not found" });
-    }
-
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) {
-      return res.status(404).json({ message: "Vehicle not found" });
-    }
-
-    const insuranceIndex = vehicle.insurance.findIndex(
-      (ins) => ins._id.toString() === insuranceId
-    );
-
-    if (insuranceIndex === -1) {
-      return res.status(404).json({ message: "Insurance not found" });
-    }
-
-    // Save the insurance data before removing
-    const removedInsurance = vehicle.insurance[insuranceIndex].toObject();
-
-    vehicle.insurance.splice(insuranceIndex, 1);
-
-    await insured.save();
-
-    const adminUser = await userModel.findOne({ role: "admin" });
-    if (!adminUser) {
-      return res.status(404).json({ message: "Admin not found" });
-    }
-
-    const senderId = req.user ? req.user._id : null;
-    if (!senderId) {
-      return res.status(401).json({ message: "User not logged in" });
-    }
-
-    const adminNotificationMessage = `The insurance for vehicle number ${vehicleId} has been deleted.`;
-    await createNotification(adminUser._id, senderId, adminNotificationMessage);
-    const findUser = await userModel.findById(req.user._id);
-    const message = `${findUser.name} deleted insurance from vehicle`;
-    await sendNotificationLogic({
-      senderId: req.user._id,
-      message,
-    });
-    await logAudit({
-      userId: req.user._id,
-      userName: findUser.name,
-      action: `Delete insurance by ${findUser.name}`,
-      entity: "Insurance",
-      entityId: vehicleId,
-      oldValue: removedInsurance,
-      newValue: null,
-    });
-
-    return res.status(200).json({ message: "Insurance deleted successfully" });
-  } catch (error) {
-    logger.error("Error removing insurance:", error);
-    next(error);
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const addInsuranceToVehicle = async (req, res, next) => {
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) {
+    return notFoundResponse(res, "Vehicle");
+  }
+
+  const insuranceIndex = vehicle.insurance.findIndex(
+    (ins) => ins._id.toString() === insuranceId
+  );
+
+  if (insuranceIndex === -1) {
+    return notFoundResponse(res, "Insurance");
+  }
+
+  // Save the insurance data before removing
+  const removedInsurance = vehicle.insurance[insuranceIndex].toObject();
+
+  vehicle.insurance.splice(insuranceIndex, 1);
+
+  await insured.save();
+
+  const adminUser = await userModel.findOne({ role: "admin" });
+  if (!adminUser) {
+    return notFoundResponse(res, "Admin");
+  }
+
+  if (!req.user) {
+    return unauthorizedResponse(res, "User not logged in");
+  }
+
+  const adminNotificationMessage = `The insurance for vehicle number ${vehicleId} has been deleted.`;
+  await createNotification(adminUser._id, req.user._id, adminNotificationMessage);
+
+  // Send notification using helper
+  await notifyAction(
+    req.user._id,
+    (userName) => `${userName} deleted insurance from vehicle`,
+  );
+
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    userName: req.user.name,
+    action: `Delete insurance by ${req.user.name}`,
+    entity: "Insurance",
+    entityId: vehicleId,
+    oldValue: removedInsurance,
+    newValue: null,
+  });
+
+  return successResponse(res, null, "Insurance deleted successfully");
+});
+
+export const createInsurance = asyncHandler(async (req, res) => {
   const { insuredId, vehicleId } = req.params;
   const {
     insuranceType,
@@ -1152,916 +1012,811 @@ export const addInsuranceToVehicle = async (req, res, next) => {
     insuranceEndDate,
   } = req.body;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) return res.status(404).json({ message: "Insured not found" });
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
+  }
 
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) {
+    return notFoundResponse(res, "Vehicle");
+  }
 
-    const company = await InsuranceCompany.findOne({
-      name: insuranceCompany,
-    }).populate("insuranceTypes", "name");
-    if (!company)
-      return res
-        .status(404)
-        .json({ message: `Insurance company ${insuranceCompany} not found` });
+  const company = await InsuranceCompany.findOne({
+    name: insuranceCompany,
+  }).populate("insuranceTypes", "name");
+  if (!company) {
+    return notFoundResponse(res, `Insurance company ${insuranceCompany}`);
+  }
 
-    // Check if the insurance type exists globally
-    const insuranceTypeDoc = await InsuranceTypeModel.findOne({
-      name: { $regex: new RegExp(`^${insuranceType}$`, "i") },
-    });
-    if (!insuranceTypeDoc) {
-      return res
-        .status(400)
-        .json({ message: `Insurance type '${insuranceType}' does not exist` });
-    }
+  // Check if the insurance type exists globally
+  const insuranceTypeDoc = await InsuranceTypeModel.findOne({
+    name: { $regex: new RegExp(`^${insuranceType}$`, "i") },
+  });
+  if (!insuranceTypeDoc) {
+    return badRequestResponse(res, `Insurance type '${insuranceType}' does not exist`);
+  }
 
-    // Check if the insurance type is available for this company
-    const typeAvailable = company.insuranceTypes.some(
-      (t) => t._id.toString() === insuranceTypeDoc._id.toString()
-    );
-    if (!typeAvailable) {
-      return res
-        .status(400)
-        .json({
-          message: `Insurance type '${insuranceType}' is not available for company '${insuranceCompany}'`,
-        });
-    }
+  // Check if the insurance type is available for this company
+  const typeAvailable = company.insuranceTypes.some(
+    (t) => t._id.toString() === insuranceTypeDoc._id.toString()
+  );
+  if (!typeAvailable) {
+    return badRequestResponse(res, `Insurance type '${insuranceType}' is not available for company '${insuranceCompany}'`);
+  }
 
-    if (!insuranceAmount || insuranceAmount <= 0) {
-      return res
-        .status(400)
-        .json({
-          message: "Insurance amount is required and must be greater than 0",
-        });
-    }
+  if (!insuranceAmount || insuranceAmount <= 0) {
+    return badRequestResponse(res, "Insurance amount is required and must be greater than 0");
+  }
 
-    // Use provided dates or calculate defaults
-    let calculatedStartDate =
-      vehicle.insurance.length > 0
-        ? vehicle.insurance[vehicle.insurance.length - 1].insuranceEndDate
-        : new Date();
+  // Use provided dates or calculate defaults
+  let calculatedStartDate =
+    vehicle.insurance.length > 0
+      ? vehicle.insurance[vehicle.insurance.length - 1].insuranceEndDate
+      : new Date();
 
-    const finalStartDate = insuranceStartDate ? new Date(insuranceStartDate) : calculatedStartDate;
+  const finalStartDate = insuranceStartDate ? new Date(insuranceStartDate) : calculatedStartDate;
 
-    let calculatedEndDate = new Date(finalStartDate);
-    calculatedEndDate.setFullYear(calculatedEndDate.getFullYear() + 1);
+  let calculatedEndDate = new Date(finalStartDate);
+  calculatedEndDate.setFullYear(calculatedEndDate.getFullYear() + 1);
 
-    const finalEndDate = insuranceEndDate ? new Date(insuranceEndDate) : calculatedEndDate;
+  const finalEndDate = insuranceEndDate ? new Date(insuranceEndDate) : calculatedEndDate;
 
-    let insuranceFilesUrls = [];
-    if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
-        const result = await cloudinary.uploader.upload(file.path, {
-          folder: "Insured/insuranceFiles/",
-        });
-        insuranceFilesUrls.push(result.secure_url);
+  // Upload files using helper
+  const insuranceFilesUrls = await uploadMultipleFiles(req.files, "insurance");
+
+  // Process payments array and create cheque records if needed
+  const processedPayments = [];
+  const chequeIds = [];
+
+  if (payments && Array.isArray(payments) && payments.length > 0) {
+    for (const payment of payments) {
+      // Auto-generate receipt number if not provided
+      let receiptNum = payment.receiptNumber;
+      if (!receiptNum || receiptNum.trim() === '') {
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        receiptNum = `REC-${timestamp}-${random}`;
       }
-    }
 
-    // Process payments array and create cheque records if needed
-    const processedPayments = [];
-    const chequeIds = [];
-
-    if (payments && Array.isArray(payments) && payments.length > 0) {
-      for (const payment of payments) {
-        // Auto-generate receipt number if not provided
-        let receiptNum = payment.receiptNumber;
-        if (!receiptNum || receiptNum.trim() === '') {
-          const timestamp = Date.now();
-          const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-          receiptNum = `REC-${timestamp}-${random}`;
-        }
-
-        const paymentRecord = {
-          amount: payment.amount,
-          paymentMethod: payment.paymentMethod,
-          paymentDate: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
-          notes: payment.notes || '',
-          receiptNumber: receiptNum,
-          recordedBy: req.user._id
-        };
-
-        // If payment is by cheque, create a Cheque document
-        if (payment.paymentMethod === 'cheque' && payment.chequeNumber) {
-          const chequeDoc = await ChequeModel.create({
-            chequeNumber: payment.chequeNumber,
-            customer: {
-              insuredId: insuredId,
-              name: `${insured.first_name} ${insured.last_name}`,
-              idNumber: insured.id_Number,
-              phoneNumber: insured.phone_number
-            },
-            chequeDate: payment.chequeDate ? new Date(payment.chequeDate) : new Date(),
-            amount: payment.amount,
-            status: payment.chequeStatus || 'pending',
-            insuranceId: null, // Will be set after insurance is created
-            vehicleId: vehicleId,
-            notes: payment.notes || '',
-            createdBy: req.user._id
-          });
-
-          paymentRecord.chequeId = chequeDoc._id;
-          chequeIds.push(chequeDoc._id);
-        }
-
-        processedPayments.push(paymentRecord);
-      }
-    }
-
-    const newInsurance = {
-      insuranceStartDate: finalStartDate,
-      insuranceEndDate: finalEndDate,
-      isUnder24,
-      insuranceCategory: "vehicle_insurance",
-      insuranceType,
-      insuranceCompany,
-      agent,
-      agentId,
-      agentFlow: agentFlow || 'none',
-      agentAmount: agentAmount || 0,
-      insuranceAmount,
-      payments: processedPayments,
-      insuranceFiles: insuranceFilesUrls,
-      priceisOnTheCustomer,
-      cheques: chequeIds
-    };
-
-    vehicle.insurance.push(newInsurance);
-
-    await insured.save({ validateBeforeSave: false });
-
-    // Get the newly created insurance ID from the saved document
-    const savedVehicle = insured.vehicles.id(vehicleId);
-    const savedInsurance = savedVehicle.insurance[savedVehicle.insurance.length - 1];
-    const insuranceId = savedInsurance._id;
-
-    // Create Revenue records for each payment
-    if (processedPayments.length > 0) {
-      for (const payment of processedPayments) {
-        await RevenueModel.create({
-          title: `Insurance Payment - ${insuranceType}`,
-          amount: payment.amount,
-          receivedFrom: `${insured.first_name} ${insured.last_name}`,
-          paymentMethod: payment.paymentMethod === 'cheque' ? 'check' : payment.paymentMethod,
-          date: payment.paymentDate,
-          description: payment.notes || `${payment.paymentMethod} payment for ${insuranceCompany} insurance (${insuranceType})`,
-          fromVehiclePlate: savedVehicle.plateNumber
-        });
-      }
-    }
-
-    // Handle agent transactions if agentFlow is specified
-    if (agentFlow && agentFlow !== 'none' && agentAmount > 0) {
-      const transactionType = agentFlow === 'from_agent' ? 'credit' : 'debit';
-      const description = agentFlow === 'from_agent'
-        ? `Commission for insurance ${insuranceId}`
-        : `Payment received from agent for insurance ${insuranceId}`;
-
-      await AgentTransactionModel.create({
-        agentName: agent,
-        agentId: agentId,
-        transactionType: transactionType,
-        amount: agentAmount,
-        description: description,
-        insuranceCompany: insuranceCompany,
-        customer: insuredId,
-        vehicle: vehicleId,
-        insurance: insuranceId,
+      const paymentRecord = {
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        paymentDate: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
+        notes: payment.notes || '',
+        receiptNumber: receiptNum,
         recordedBy: req.user._id
+      };
+
+      // If payment is by cheque, create a Cheque document
+      if (payment.paymentMethod === 'cheque' && payment.chequeNumber) {
+        const chequeDoc = await ChequeModel.create({
+          chequeNumber: payment.chequeNumber,
+          customer: {
+            insuredId: insuredId,
+            name: `${insured.first_name} ${insured.last_name}`,
+            idNumber: insured.id_Number,
+            phoneNumber: insured.phone_number
+          },
+          chequeDate: payment.chequeDate ? new Date(payment.chequeDate) : new Date(),
+          amount: payment.amount,
+          status: payment.chequeStatus || 'pending',
+          insuranceId: null, // Will be set after insurance is created
+          vehicleId: vehicleId,
+          notes: payment.notes || '',
+          createdBy: req.user._id
+        });
+
+        paymentRecord.chequeId = chequeDoc._id;
+        chequeIds.push(chequeDoc._id);
+      }
+
+      processedPayments.push(paymentRecord);
+    }
+  }
+
+  const newInsurance = {
+    insuranceStartDate: finalStartDate,
+    insuranceEndDate: finalEndDate,
+    isUnder24,
+    insuranceCategory: "vehicle_insurance",
+    insuranceType,
+    insuranceCompany,
+    agent,
+    agentId,
+    agentFlow: agentFlow || 'none',
+    agentAmount: agentAmount || 0,
+    insuranceAmount,
+    payments: processedPayments,
+    insuranceFiles: insuranceFilesUrls,
+    priceisOnTheCustomer,
+    cheques: chequeIds
+  };
+
+  vehicle.insurance.push(newInsurance);
+
+  await insured.save({ validateBeforeSave: false });
+
+  // Get the newly created insurance ID from the saved document
+  const savedVehicle = insured.vehicles.id(vehicleId);
+  const savedInsurance = savedVehicle.insurance[savedVehicle.insurance.length - 1];
+  const insuranceId = savedInsurance._id;
+
+  // Create Revenue records for each payment
+  if (processedPayments.length > 0) {
+    for (const payment of processedPayments) {
+      await RevenueModel.create({
+        title: `Insurance Payment - ${insuranceType}`,
+        amount: payment.amount,
+        receivedFrom: `${insured.first_name} ${insured.last_name}`,
+        paymentMethod: payment.paymentMethod === 'cheque' ? 'check' : payment.paymentMethod,
+        date: payment.paymentDate,
+        description: payment.notes || `${payment.paymentMethod} payment for ${insuranceCompany} insurance (${insuranceType})`,
+        fromVehiclePlate: savedVehicle.plateNumber
       });
     }
-
-    // Invalidate related caches
-    await invalidateAllRelatedCaches();
-
-    const findUser = await userModel.findById(req.user._id);
-
-    const message = `${findUser.name} added new insurance`;
-    await sendNotificationLogic({ senderId: req.user._id, message });
-    await logAudit({
-      userId: req.user._id,
-      userName: findUser.name,
-      action: `Add new insurance to vehicle ${vehicleId}`,
-      entity: "Insurance",
-      entityId: vehicleId,
-      oldValue: null,
-      newValue: newInsurance,
-    });
-
-    res
-      .status(200)
-      .json({
-        message: "Insurance added successfully",
-        insurance: newInsurance,
-      });
-  } catch (error) {
-    logger.error("Error adding insurance:", error);
-    next(error);
   }
-};
 
-export const getInsurancesForVehicle = async (req, res, next) => {
+  // Handle agent transactions if agentFlow is specified
+  if (agentFlow && agentFlow !== 'none' && agentAmount > 0) {
+    const transactionType = agentFlow === 'from_agent' ? 'credit' : 'debit';
+    const description = agentFlow === 'from_agent'
+      ? `Commission for insurance ${insuranceId}`
+      : `Payment received from agent for insurance ${insuranceId}`;
+
+    await AgentTransactionModel.create({
+      agentName: agent,
+      agentId: agentId,
+      transactionType: transactionType,
+      amount: agentAmount,
+      description: description,
+      insuranceCompany: insuranceCompany,
+      customer: insuredId,
+      vehicle: vehicleId,
+      insurance: insuranceId,
+      recordedBy: req.user._id
+    });
+  }
+
+  // Invalidate related caches
+  await invalidateAllRelatedCaches();
+
+  // Send notification using helper
+  await notifyAction(
+    req.user._id,
+    (userName) => `${userName} added new insurance`
+  );
+
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    userName: req.user.name,
+    action: `Add new insurance to vehicle ${vehicleId}`,
+    entity: "Insurance",
+    entityId: vehicleId,
+    oldValue: null,
+    newValue: newInsurance,
+  });
+
+  return successResponse(res, { insurance: newInsurance }, "Insurance added successfully");
+});
+
+export const getInsurancesForVehicle = asyncHandler(async (req, res) => {
   const { insuredId, vehicleId } = req.params;
-  const { status } = req.query; // optional: 'all', 'paid', 'unpaid'
+  const { status } = req.query;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) {
-      return res.status(404).json({ message: "Insured not found" });
-    }
-
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) {
-      return res.status(404).json({ message: "Vehicle not found" });
-    }
-
-    let insurances = vehicle.insurance;
-
-    // Filter by payment status if requested
-    if (status === 'unpaid') {
-      insurances = insurances.filter(ins => ins.remainingDebt > 0);
-    } else if (status === 'paid') {
-      insurances = insurances.filter(ins => ins.remainingDebt === 0);
-    }
-
-    // Calculate summary
-    const summary = {
-      total: insurances.length,
-      totalAmount: insurances.reduce((sum, ins) => sum + ins.insuranceAmount, 0),
-      totalPaid: insurances.reduce((sum, ins) => sum + ins.paidAmount, 0),
-      totalRemaining: insurances.reduce((sum, ins) => sum + ins.remainingDebt, 0),
-      fullyPaid: insurances.filter(ins => ins.remainingDebt === 0).length,
-      partiallyPaid: insurances.filter(ins => ins.remainingDebt > 0 && ins.paidAmount > 0).length,
-      unpaid: insurances.filter(ins => ins.paidAmount === 0).length
-    };
-
-    res.status(200).json({
-      success: true,
-      message: "Insurances retrieved successfully",
-      vehicle: {
-        _id: vehicle._id,
-        plateNumber: vehicle.plateNumber,
-        model: vehicle.model,
-        type: vehicle.type
-      },
-      customer: {
-        _id: insured._id,
-        name: `${insured.first_name} ${insured.last_name}`,
-        phone: insured.phone_number
-      },
-      summary,
-      insurances
-    });
-  } catch (error) {
-    logger.error("Error retrieving insurances:", error);
-    next(error);
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
+
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) {
+    return notFoundResponse(res, "Vehicle");
+  }
+
+  let insurances = vehicle.insurance;
+
+  // Filter by payment status if requested
+  if (status === 'unpaid') {
+    insurances = insurances.filter(ins => ins.remainingDebt > 0);
+  } else if (status === 'paid') {
+    insurances = insurances.filter(ins => ins.remainingDebt === 0);
+  }
+
+  // Calculate summary
+  const summary = {
+    total: insurances.length,
+    totalAmount: insurances.reduce((sum, ins) => sum + ins.insuranceAmount, 0),
+    totalPaid: insurances.reduce((sum, ins) => sum + ins.paidAmount, 0),
+    totalRemaining: insurances.reduce((sum, ins) => sum + ins.remainingDebt, 0),
+    fullyPaid: insurances.filter(ins => ins.remainingDebt === 0).length,
+    partiallyPaid: insurances.filter(ins => ins.remainingDebt > 0 && ins.paidAmount > 0).length,
+    unpaid: insurances.filter(ins => ins.paidAmount === 0).length
+  };
+
+  return successResponse(res, {
+    vehicle: {
+      _id: vehicle._id,
+      plateNumber: vehicle.plateNumber,
+      model: vehicle.model,
+      type: vehicle.type
+    },
+    customer: {
+      _id: insured._id,
+      name: `${insured.first_name} ${insured.last_name}`,
+      phone: insured.phone_number
+    },
+    summary,
+    insurances
+  }, "Insurances retrieved successfully");
+});
 
 // API to get all insurances for an insured (for all vehicles)
-export const getAllInsurancesForInsured = async (req, res, next) => {
+export const getAllInsurancesForInsured = asyncHandler(async (req, res) => {
   const { insuredId } = req.params;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) {
-      return res.status(404).json({ message: "Insured not found" });
-    }
-
-    // نجمع كل التأمينات من كل السيارات
-    const allInsurances = insured.vehicles.flatMap(
-      (vehicle) => vehicle.insurance
-    );
-
-    res.status(200).json({ insurances: allInsurances });
-  } catch (error) {
-    logger.error("Error retrieving all insurances:", error);
-    next(error);
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const addCheckToInsurance = async (req, res, next) => {
+  // Collect all insurances from all vehicles
+  const allInsurances = insured.vehicles.flatMap(
+    (vehicle) => vehicle.insurance
+  );
+
+  return successResponse(res, { insurances: allInsurances }, "All insurances retrieved successfully");
+});
+
+export const createCheck = asyncHandler(async (req, res) => {
   const { insuredId, vehicleId, insuranceId } = req.params;
   const { checkNumber, checkDueDate, checkAmount, isReturned } = req.body;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) return res.status(404).json({ message: "Insured not found" });
-
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
-
-    const insurance = vehicle.insurance.id(insuranceId);
-    if (!insurance)
-      return res.status(404).json({ message: "Insurance not found" });
-
-    let checkImageUrl = null;
-    if (req.file) {
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: "Checks/",
-      });
-      checkImageUrl = result.secure_url;
-    }
-
-    const newCheck = {
-      checkNumber,
-      checkDueDate,
-      checkAmount,
-      isReturned,
-      checkImage: checkImageUrl,
-    };
-
-    insurance.checkDetails.push(newCheck);
-    insurance.paidAmount += checkAmount;
-    insurance.remainingDebt = insurance.insuranceAmount - insurance.paidAmount;
-    const findUser = await userModel.findById(req.user._id);
-    await insured.save();
-    const message = `${findUser.name} added new check #${checkNumber}`;
-    await sendNotificationLogic({
-      senderId: req.user._id,
-      message,
-    });
-    await logAudit({
-      userId: req.user._id,
-      userName: findUser.name,
-      action: `Add chack by ${findUser.name}`,
-      entity: "Check",
-      entityId: insuranceId,
-      oldValue: null,
-      newValue: {
-        addedCheck: newCheck,
-        paidAmount: insurance.paidAmount,
-        remainingDebt: insurance.remainingDebt,
-      },
-    });
-
-    res.status(200).json({ message: "Check added successfully", insurance });
-  } catch (error) {
-    logger.error("Error adding check:", error);
-    next(error);
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
   }
-};
 
-export const getInsuranceChecks = async (req, res, next) => {
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) {
+    return notFoundResponse(res, "Vehicle");
+  }
+
+  const insurance = vehicle.insurance.id(insuranceId);
+  if (!insurance) {
+    return notFoundResponse(res, "Insurance");
+  }
+
+  const checkImageUrl = await uploadSingleFileWithDefault(req.file, "cheques", null);
+
+  const newCheck = {
+    checkNumber,
+    checkDueDate,
+    checkAmount,
+    isReturned,
+    checkImage: checkImageUrl,
+  };
+
+  insurance.checkDetails.push(newCheck);
+  insurance.paidAmount += checkAmount;
+  insurance.remainingDebt = insurance.insuranceAmount - insurance.paidAmount;
+
+  await insured.save();
+
+  // Send notification using helper
+  await notifyAction(
+    req.user._id,
+    (userName, checkNum) => `${userName} added new check #${checkNum}`,
+    checkNumber
+  );
+
+  // Log audit
+  await logAudit({
+    userId: req.user._id,
+    userName: req.user.name,
+    action: `Add check by ${req.user.name}`,
+    entity: "Check",
+    entityId: insuranceId,
+    oldValue: null,
+    newValue: {
+      addedCheck: newCheck,
+      paidAmount: insurance.paidAmount,
+      remainingDebt: insurance.remainingDebt,
+    },
+  });
+
+  return successResponse(res, { insurance }, "Check added successfully");
+});
+
+export const getInsuranceChecks = asyncHandler(async (req, res) => {
   const { insuredId, vehicleId, insuranceId } = req.params;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) return res.status(404).json({ message: "Insured not found" });
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) return notFoundResponse(res, "Insured");
 
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) return notFoundResponse(res, "Vehicle");
 
-    const insurance = vehicle.insurance.id(insuranceId);
-    if (!insurance)
-      return res.status(404).json({ message: "Insurance not found" });
+  const insurance = vehicle.insurance.id(insuranceId);
+  if (!insurance) return notFoundResponse(res, "Insurance");
 
-    res.status(200).json({
-      message: "Check details fetched successfully",
-      checks: insurance.checkDetails,
-    });
-  } catch (error) {
-    logger.error("Error fetching check details:", error);
-    next(error);
-  }
-};
+  return successResponse(
+    res,
+    { checks: insurance.checkDetails },
+    "Check details fetched successfully"
+  );
+});
 
-export const getAllChecksForVehicle = async (req, res, next) => {
+export const getAllChecksForVehicle = asyncHandler(async (req, res) => {
   const { insuredId, vehicleId } = req.params;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) return res.status(404).json({ message: "Insured not found" });
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) return notFoundResponse(res, "Insured");
 
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) return notFoundResponse(res, "Vehicle");
 
-    let allChecks = [];
+  let allChecks = [];
 
-    vehicle.insurance.forEach((insurance) => {
-      if (insurance.checkDetails && insurance.checkDetails.length > 0) {
-        insurance.checkDetails.forEach((check) => {
-          allChecks.push({
-            ...check.toObject(),
-            insuranceId: insurance._id,
-            insuranceType: insurance.insuranceType,
-            insuranceCompany: insurance.insuranceCompany,
-          });
+  vehicle.insurance.forEach((insurance) => {
+    if (insurance.checkDetails && insurance.checkDetails.length > 0) {
+      insurance.checkDetails.forEach((check) => {
+        allChecks.push({
+          ...check.toObject(),
+          insuranceId: insurance._id,
+          insuranceType: insurance.insuranceType,
+          insuranceCompany: insurance.insuranceCompany,
         });
-      }
-    });
+      });
+    }
+  });
 
-    res.status(200).json({
-      message: "All checks for the vehicle retrieved successfully",
-      checks: allChecks,
-    });
-  } catch (error) {
-    logger.error("Error fetching checks for vehicle:", error);
-    next(error);
-  }
-};
+  return successResponse(
+    res,
+    { checks: allChecks },
+    "All checks for the vehicle retrieved successfully"
+  );
+});
 
-export const deleteCheckFromInsurance = async (req, res, next) => {
+export const deleteCheck = asyncHandler(async (req, res) => {
   const { insuredId, vehicleId, insuranceId, checkId } = req.params;
 
-  try {
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) return res.status(404).json({ message: "Insured not found" });
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) return notFoundResponse(res, "Insured");
 
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) return notFoundResponse(res, "Vehicle");
 
-    const insurance = vehicle.insurance.id(insuranceId);
-    if (!insurance)
-      return res.status(404).json({ message: "Insurance not found" });
+  const insurance = vehicle.insurance.id(insuranceId);
+  if (!insurance) return notFoundResponse(res, "Insurance");
 
-    const checkIndex = insurance.checkDetails.findIndex(
-      (check) => check._id.toString() === checkId
-    );
-    if (checkIndex === -1)
-      return res.status(404).json({ message: "Check not found" });
+  const checkIndex = insurance.checkDetails.findIndex(
+    (check) => check._id.toString() === checkId
+  );
+  if (checkIndex === -1) return notFoundResponse(res, "Check");
 
-    const removedCheck = insurance.checkDetails[checkIndex];
-    insurance.paidAmount -= removedCheck.checkAmount;
-    insurance.remainingDebt = insurance.insuranceAmount - insurance.paidAmount;
+  const removedCheck = insurance.checkDetails[checkIndex];
+  insurance.paidAmount -= removedCheck.checkAmount;
+  insurance.remainingDebt = insurance.insuranceAmount - insurance.paidAmount;
 
-    insurance.checkDetails.splice(checkIndex, 1);
-    const findUser = await userModel.findById(req.user._id);
-    await insured.save();
-    const message = `${findUser.name} deleted check from insurance`;
-    await sendNotificationLogic({
-      senderId: req.user._id,
-      message,
-    });
-    await logAudit({
-      userId: req.user._id,
-      userName: findUser.name,
-      action: `Delete check by ${findUser.name}`,
-      entity: "Check",
-      entityId: checkId,
-      oldValue: null,
-      newValue: null,
-    });
+  insurance.checkDetails.splice(checkIndex, 1);
+  await insured.save();
 
-    res.status(200).json({ message: "Check deleted successfully" });
-  } catch (error) {
-    logger.error("Error deleting check:", error);
-    next(error);
-  }
-};
+  await notifyAction(
+    req.user._id,
+    (userName) => `${userName} deleted check from insurance`
+  );
 
-export const getActiveInsurancesCount = async (req, res, next) => {
-  try {
-    const result = await insuredModel.aggregate([
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      {
-        $match: {
-          "vehicles.insurance.insuranceEndDate": { $gte: new Date() }
-        }
-      },
-      { $count: "activeInsurances" }
-    ]);
+  await logAudit({
+    userId: req.user._id,
+    userName: req.user.name,
+    action: `Delete check by ${req.user.name}`,
+    entity: "Check",
+    entityId: checkId,
+    oldValue: null,
+    newValue: null,
+  });
 
-    const activeCount = result.length > 0 ? result[0].activeInsurances : 0;
-    return res.status(200).json({ activeInsurances: activeCount });
-  } catch (error) {
-    logger.error("Error counting active insurances:", error);
-    next(error);
-  }
-};
+  return successResponse(res, {}, "Check deleted successfully");
+});
 
-export const getExpiredInsurancesCount = async (req, res, next) => {
-  try {
-    const result = await insuredModel.aggregate([
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      {
-        $match: {
-          "vehicles.insurance.insuranceEndDate": { $lt: new Date() }
-        }
-      },
-      { $count: "expiredInsurances" }
-    ]);
-
-    const expiredCount = result.length > 0 ? result[0].expiredInsurances : 0;
-    return res.status(200).json({ expiredInsurances: expiredCount });
-  } catch (error) {
-    logger.error("Error counting expired insurances:", error);
-    next(error);
-  }
-};
-
-export const getTotalPayments = async (req, res, next) => {
-  try {
-    const result = await insuredModel.aggregate([
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      {
-        $group: {
-          _id: null,
-          totalPayments: { $sum: "$vehicles.insurance.paidAmount" }
-        }
+export const getActiveInsurancesCount = asyncHandler(async (req, res) => {
+  const result = await insuredModel.aggregate([
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    {
+      $match: {
+        "vehicles.insurance.insuranceEndDate": { $gte: new Date() }
       }
-    ]);
+    },
+    { $count: "activeInsurances" }
+  ]);
 
-    const totalPayments = result.length > 0 ? result[0].totalPayments : 0;
-    return res.status(200).json({ totalPayments });
-  } catch (error) {
-    logger.error("Error calculating total payments:", error);
-    next(error);
-  }
-};
+  const activeCount = result.length > 0 ? result[0].activeInsurances : 0;
+  return successResponse(res, { activeInsurances: activeCount });
+});
 
-export const getPaymentsByMethod = async (req, res, next) => {
-  try {
-    const result = await insuredModel.aggregate([
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      {
-        $group: {
-          _id: "$vehicles.insurance.paymentMethod",
-          totalAmount: { $sum: "$vehicles.insurance.paidAmount" }
-        }
+export const getExpiredInsurancesCount = asyncHandler(async (req, res) => {
+  const result = await insuredModel.aggregate([
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    {
+      $match: {
+        "vehicles.insurance.insuranceEndDate": { $lt: new Date() }
       }
-    ]);
+    },
+    { $count: "expiredInsurances" }
+  ]);
 
-    let visaPayments = 0;
-    let cashPayments = 0;
-    let checkPayments = 0;
-    let bankPayments = 0;
+  const expiredCount = result.length > 0 ? result[0].expiredInsurances : 0;
+  return successResponse(res, { expiredInsurances: expiredCount });
+});
 
-    result.forEach(item => {
-      const method = item._id ? item._id.toLowerCase() : '';
-      const amount = item.totalAmount || 0;
-
-      if (method === "card" || method === "visa" || method === "فيزا") {
-        visaPayments += amount;
-      } else if (method === "cash" || method === "نقداً") {
-        cashPayments += amount;
-      } else if (method === "check" || method === "cheque" || method === "شيكات") {
-        checkPayments += amount;
-      } else if (method === "bank_transfer") {
-        bankPayments += amount;
+export const getTotalPayments = asyncHandler(async (req, res) => {
+  const result = await insuredModel.aggregate([
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    {
+      $group: {
+        _id: null,
+        totalPayments: { $sum: "$vehicles.insurance.paidAmount" }
       }
-    });
+    }
+  ]);
 
-    return res.status(200).json({
-      visaPayments,
-      cashPayments,
-      checkPayments,
-      bankPayments,
-    });
-  } catch (error) {
-    logger.error("Error calculating payments by method:", error);
-    next(error);
-  }
-};
+  const totalPayments = result.length > 0 ? result[0].totalPayments : 0;
+  return successResponse(res, { totalPayments });
+});
 
-export const getReturnedChecksAmount = async (req, res, next) => {
-  try {
-    const result = await insuredModel.aggregate([
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      { $unwind: "$vehicles.insurance.checkDetails" },
-      {
-        $match: {
-          "vehicles.insurance.checkDetails.isReturned": true
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          returnedChecksTotal: { $sum: "$vehicles.insurance.checkDetails.checkAmount" }
-        }
+export const getPaymentsByMethod = asyncHandler(async (req, res) => {
+  const result = await insuredModel.aggregate([
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    {
+      $group: {
+        _id: "$vehicles.insurance.paymentMethod",
+        totalAmount: { $sum: "$vehicles.insurance.paidAmount" }
       }
-    ]);
-
-    const returnedChecksTotal = result.length > 0 ? result[0].returnedChecksTotal : 0;
-    return res.status(200).json({ returnedChecksTotal });
-  } catch (error) {
-    logger.error("Error calculating returned checks:", error);
-    next(error);
-  }
-};
-
-export const getDebtsByCustomer = async (req, res, next) => {
-  try {
-    const customerDebts = await insuredModel.aggregate([
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      {
-        $group: {
-          _id: "$_id",
-          customer: {
-            $first: { $concat: ["$first_name", " ", "$last_name"] }
-          },
-          totalDebt: { $sum: "$vehicles.insurance.remainingDebt" }
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          customer: 1,
-          totalDebt: 1
-        }
-      },
-      { $sort: { totalDebt: -1 } }
-    ]);
-
-    return res.status(200).json({ customerDebts });
-  } catch (error) {
-    logger.error("Error calculating debts by customer:", error);
-    next(error);
-  }
-};
-
-export const getPaymentsAndDebtsByAgent = async (req, res, next) => {
-  try {
-    const { agentName } = req.params;
-
-    const insureds = await insuredModel
-      .find({
-        "vehicles.insurance.agent": agentName,
-      })
-      .select("first_name last_name vehicles.insurance");
-
-    let totalPaid = 0;
-    let totalDebts = 0;
-    let insuranceList = [];
-
-    insureds.forEach((insured) => {
-      insured.vehicles.forEach((vehicle) => {
-        vehicle.insurance.forEach((insurance) => {
-          if (insurance.agent === agentName) {
-            totalPaid += insurance.paidAmount || 0;
-            totalDebts += insurance.remainingDebt || 0;
-
-            insuranceList.push({
-              customer: `${insured.first_name} ${insured.last_name}`,
-              insuranceCompany: insurance.insuranceCompany,
-              insuranceType: insurance.insuranceType,
-              insuranceAmount: insurance.insuranceAmount,
-              paidAmount: insurance.paidAmount,
-              remainingDebt: insurance.remainingDebt,
-              paymentMethod: insurance.paymentMethod,
-              insuranceStartDate: insurance.insuranceStartDate,
-              insuranceEndDate: insurance.insuranceEndDate,
-
-              summary: {
-                total: insurance.insuranceAmount || 0,
-                paid: insurance.paidAmount || 0,
-                remaining: insurance.remainingDebt || 0,
-              },
-            });
-          }
-        });
-      });
-    });
-
-    return res.status(200).json({
-      agent: agentName,
-      totalPaid,
-      totalDebts,
-      insuranceList,
-    });
-  } catch (error) {
-    logger.error("Error calculating payments and debts by agent:", error);
-    next(error);
-  }
-};
-
-export const getCustomersReport = async (req, res, next) => {
-  try {
-    const { startDate, endDate, agentName } = req.query;
-    const { page, limit, skip } = getPaginationParams(req.query);
-    const sort = getSortParams(req.query, '-joining_date', SORT_FIELDS.INSURED);
-
-    const filter = {};
-
-    if (startDate && endDate) {
-      filter.joining_date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
     }
+  ]);
 
-    if (agentName) {
-      filter.agentsName = agentName;
+  let visaPayments = 0;
+  let cashPayments = 0;
+  let checkPayments = 0;
+  let bankPayments = 0;
+
+  result.forEach(item => {
+    const method = item._id ? item._id.toLowerCase() : '';
+    const amount = item.totalAmount || 0;
+
+    if (method === "card" || method === "visa" || method === "فيزا") {
+      visaPayments += amount;
+    } else if (method === "cash" || method === "نقداً") {
+      cashPayments += amount;
+    } else if (method === "check" || method === "cheque" || method === "شيكات") {
+      checkPayments += amount;
+    } else if (method === "bank_transfer") {
+      bankPayments += amount;
     }
+  });
 
-    const [customers, total] = await Promise.all([
-      insuredModel
-        .find(filter)
-        .select("first_name last_name id_Number phone_number city email joining_date agentsName")
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      insuredModel.countDocuments(filter)
-    ]);
+  return successResponse(res, {
+    visaPayments,
+    cashPayments,
+    checkPayments,
+    bankPayments,
+  });
+});
 
-    const response = buildPaginatedResponse(customers, total, page, limit);
-    return res.status(200).json({
-      message: "Customers report",
-      ...response,
-      customers: response.data
-    });
-  } catch (error) {
-    logger.error("Error generating customers report:", error);
-    next(error);
-  }
-};
-
-export const getVehicleInsuranceReport = async (req, res, next) => {
-  try {
-    const { startDate, endDate, agent, company } = req.query;
-    const { page, limit, skip } = getPaginationParams(req.query);
-
-    const matchStage = {
-      "vehicles.insurance.insuranceCategory": "vehicle_insurance",
-    };
-
-    if (startDate && endDate) {
-      matchStage["vehicles.insurance.insuranceStartDate"] = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+export const getReturnedChecksAmount = asyncHandler(async (req, res) => {
+  const result = await insuredModel.aggregate([
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    { $unwind: "$vehicles.insurance.checkDetails" },
+    {
+      $match: {
+        "vehicles.insurance.checkDetails.isReturned": true
+      }
+    },
+    {
+      $group: {
+        _id: null,
+        returnedChecksTotal: { $sum: "$vehicles.insurance.checkDetails.checkAmount" }
+      }
     }
+  ]);
 
-    if (agent) {
-      matchStage["agentsName"] = agent;
-    }
+  const returnedChecksTotal = result.length > 0 ? result[0].returnedChecksTotal : 0;
+  return successResponse(res, { returnedChecksTotal });
+});
 
-    if (company) {
-      matchStage["vehicles.insurance.insuranceCompany"] = company;
-    }
-
-    const pipeline = [
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      { $match: matchStage },
-      {
-        $project: {
-          _id: 0,
-          customerName: { $concat: ["$first_name", " ", "$last_name"] },
-          phone_number: 1,
-          agentsName: 1,
-          insuranceCompany: "$vehicles.insurance.insuranceCompany",
-          insuranceType: "$vehicles.insurance.insuranceType",
-          insuranceStartDate: "$vehicles.insurance.insuranceStartDate",
-          insuranceEndDate: "$vehicles.insurance.insuranceEndDate",
-          paidAmount: "$vehicles.insurance.paidAmount",
-          remainingDebt: "$vehicles.insurance.remainingDebt",
-          plateNumber: "$vehicles.plateNumber",
-          model: "$vehicles.model",
+export const getDebtsByCustomer = asyncHandler(async (req, res) => {
+  const customerDebts = await insuredModel.aggregate([
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    {
+      $group: {
+        _id: "$_id",
+        customer: {
+          $first: { $concat: ["$first_name", " ", "$last_name"] }
         },
-      },
-    ];
-
-    const [report, countResult] = await Promise.all([
-      insuredModel.aggregate([...pipeline, { $skip: skip }, { $limit: limit }]),
-      insuredModel.aggregate([...pipeline, { $count: "total" }])
-    ]);
-
-    const total = countResult.length > 0 ? countResult[0].total : 0;
-    const response = buildPaginatedResponse(report, total, page, limit);
-
-    res.status(200).json({
-      message: "Vehicle insurance report",
-      ...response,
-      report: response.data
-    });
-  } catch (error) {
-    logger.error("Error generating vehicle insurance report:", error);
-    next(error);
-  }
-};
-
-export const getOutstandingDebtsReport = async (req, res, next) => {
-  try {
-    const { startDate, endDate, agentName } = req.query;
-
-    const matchStage = {};
-    if (agentName) {
-      matchStage.agentsName = agentName;
-    }
-
-    const insuranceMatchStage = {};
-    if (startDate && endDate) {
-      insuranceMatchStage["vehicles.insurance.insuranceStartDate"] = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
-
-    // Get unpaid insurances with aggregation
-    const unpaidPipeline = [
-      ...(Object.keys(matchStage).length > 0 ? [{ $match: matchStage }] : []),
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      {
-        $match: {
-          ...insuranceMatchStage,
-          "vehicles.insurance.remainingDebt": { $gt: 0 },
-          "vehicles.insurance.insuranceStatus": "active"
-        }
-      },
-      {
-        $project: {
-          customer: { $concat: ["$first_name", " ", "$last_name"] },
-          vehiclePlate: "$vehicles.plateNumber",
-          insuranceCompany: "$vehicles.insurance.insuranceCompany",
-          insuranceType: "$vehicles.insurance.insuranceType",
-          insuranceStartDate: "$vehicles.insurance.insuranceStartDate",
-          insuranceEndDate: "$vehicles.insurance.insuranceEndDate",
-          remainingDebt: "$vehicles.insurance.remainingDebt",
-          paidAmount: "$vehicles.insurance.paidAmount",
-          totalAmount: "$vehicles.insurance.insuranceAmount"
-        }
+        totalDebt: { $sum: "$vehicles.insurance.remainingDebt" }
       }
-    ];
-
-    // Get outstanding checks with aggregation
-    const checksPipeline = [
-      ...(Object.keys(matchStage).length > 0 ? [{ $match: matchStage }] : []),
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      ...(Object.keys(insuranceMatchStage).length > 0 ? [{ $match: insuranceMatchStage }] : []),
-      { $unwind: "$vehicles.insurance.checkDetails" },
-      {
-        $match: {
-          "vehicles.insurance.checkDetails.isReturned": false,
-          "vehicles.insurance.checkDetails.checkDueDate": { $lte: new Date() }
-        }
-      },
-      {
-        $project: {
-          customer: { $concat: ["$first_name", " ", "$last_name"] },
-          vehiclePlate: "$vehicles.plateNumber",
-          insuranceCompany: "$vehicles.insurance.insuranceCompany",
-          insuranceType: "$vehicles.insurance.insuranceType",
-          checkNumber: "$vehicles.insurance.checkDetails.checkNumber",
-          checkAmount: "$vehicles.insurance.checkDetails.checkAmount",
-          dueDate: "$vehicles.insurance.checkDetails.checkDueDate"
-        }
+    },
+    {
+      $project: {
+        _id: 0,
+        customer: 1,
+        totalDebt: 1
       }
-    ];
+    },
+    { $sort: { totalDebt: -1 } }
+  ]);
 
-    const [unpaidInsurances, outstandingChecks, debtTotal] = await Promise.all([
-      insuredModel.aggregate(unpaidPipeline),
-      insuredModel.aggregate(checksPipeline),
-      insuredModel.aggregate([
-        ...unpaidPipeline,
-        {
-          $group: {
-            _id: null,
-            totalDebt: { $sum: "$remainingDebt" }
-          }
+  return successResponse(res, { customerDebts });
+});
+
+export const getPaymentsAndDebtsByAgent = asyncHandler(async (req, res) => {
+  const { agentName } = req.params;
+
+  const insureds = await insuredModel
+    .find({
+      "vehicles.insurance.agent": agentName,
+    })
+    .select("first_name last_name vehicles.insurance");
+
+  let totalPaid = 0;
+  let totalDebts = 0;
+  let insuranceList = [];
+
+  insureds.forEach((insured) => {
+    insured.vehicles.forEach((vehicle) => {
+      vehicle.insurance.forEach((insurance) => {
+        if (insurance.agent === agentName) {
+          totalPaid += insurance.paidAmount || 0;
+          totalDebts += insurance.remainingDebt || 0;
+
+          insuranceList.push({
+            customer: `${insured.first_name} ${insured.last_name}`,
+            insuranceCompany: insurance.insuranceCompany,
+            insuranceType: insurance.insuranceType,
+            insuranceAmount: insurance.insuranceAmount,
+            paidAmount: insurance.paidAmount,
+            remainingDebt: insurance.remainingDebt,
+            paymentMethod: insurance.paymentMethod,
+            insuranceStartDate: insurance.insuranceStartDate,
+            insuranceEndDate: insurance.insuranceEndDate,
+
+            summary: {
+              total: insurance.insuranceAmount || 0,
+              paid: insurance.paidAmount || 0,
+              remaining: insurance.remainingDebt || 0,
+            },
+          });
         }
-      ])
-    ]);
-
-    const totalDebt = debtTotal.length > 0 ? debtTotal[0].totalDebt : 0;
-
-    res.status(200).json({
-      totalDebt,
-      outstandingChecksCount: outstandingChecks.length,
-      unpaidInsurancesCount: unpaidInsurances.length,
-      outstandingChecks,
-      unpaidInsurances,
-    });
-  } catch (error) {
-    logger.error("Error generating outstanding debts report:", error);
-    next(error);
-  }
-};
-
-export const getVehicleDataFromGovApi = async (req, res, next) => {
-  try {
-    const { plateNumber } = req.params;
-
-    if (!plateNumber) {
-      return res.status(400).json({ message: "Plate number is required" });
-    }
-
-    // Sanitize and validate plate number
-    const trimmedPlateNumber = String(plateNumber).trim();
-
-    // Validate format: only alphanumeric characters and hyphens, length between 1-20
-    if (!/^[a-zA-Z0-9-]{1,20}$/.test(trimmedPlateNumber)) {
-      return res.status(400).json({
-        message: "Invalid plate number format. Only alphanumeric characters and hyphens are allowed."
       });
+    });
+  });
+
+  return successResponse(res, {
+    agent: agentName,
+    totalPaid,
+    totalDebts,
+    insuranceList,
+  });
+});
+
+export const getCustomersReport = asyncHandler(async (req, res) => {
+  const { startDate, endDate, agentName } = req.query;
+  const { page, limit, skip } = getPaginationParams(req.query);
+  const sort = getSortParams(req.query, '-joining_date', SORT_FIELDS.INSURED);
+
+  const filter = {};
+
+  if (startDate && endDate) {
+    filter.joining_date = {
+      $gte: new Date(startDate),
+      $lte: new Date(endDate),
+    };
+  }
+
+  if (agentName) {
+    filter.agentsName = agentName;
+  }
+
+  const [customers, total] = await Promise.all([
+    insuredModel
+      .find(filter)
+      .select("first_name last_name id_Number phone_number city email joining_date agentsName")
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    insuredModel.countDocuments(filter)
+  ]);
+
+  const response = buildPaginatedResponse(customers, total, page, limit);
+  return successResponse(res, {
+    ...response,
+    customers: response.data
+  }, "Customers report");
+});
+
+export const getVehicleInsuranceReport = asyncHandler(async (req, res) => {
+  const { startDate, endDate, agent, company } = req.query;
+  const { page, limit, skip } = getPaginationParams(req.query);
+
+  const matchStage = {
+    "vehicles.insurance.insuranceCategory": "vehicle_insurance",
+  };
+
+  if (startDate && endDate) {
+    matchStage["vehicles.insurance.insuranceStartDate"] = {
+      $gte: new Date(startDate),
+      $lte: new Date(endDate),
+    };
+  }
+
+  if (agent) {
+    matchStage["agentsName"] = agent;
+  }
+
+  if (company) {
+    matchStage["vehicles.insurance.insuranceCompany"] = company;
+  }
+
+  const pipeline = [
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    { $match: matchStage },
+    {
+      $project: {
+        _id: 0,
+        customerName: { $concat: ["$first_name", " ", "$last_name"] },
+        phone_number: 1,
+        agentsName: 1,
+        insuranceCompany: "$vehicles.insurance.insuranceCompany",
+        insuranceType: "$vehicles.insurance.insuranceType",
+        insuranceStartDate: "$vehicles.insurance.insuranceStartDate",
+        insuranceEndDate: "$vehicles.insurance.insuranceEndDate",
+        paidAmount: "$vehicles.insurance.paidAmount",
+        remainingDebt: "$vehicles.insurance.remainingDebt",
+        plateNumber: "$vehicles.plateNumber",
+        model: "$vehicles.model",
+      },
+    },
+  ];
+
+  const [report, countResult] = await Promise.all([
+    insuredModel.aggregate([...pipeline, { $skip: skip }, { $limit: limit }]),
+    insuredModel.aggregate([...pipeline, { $count: "total" }])
+  ]);
+
+  const total = countResult.length > 0 ? countResult[0].total : 0;
+  const response = buildPaginatedResponse(report, total, page, limit);
+
+  return successResponse(res, {
+    ...response,
+    report: response.data
+  }, "Vehicle insurance report");
+});
+
+export const getOutstandingDebtsReport = asyncHandler(async (req, res) => {
+  const { startDate, endDate, agentName } = req.query;
+
+  const matchStage = {};
+  if (agentName) {
+    matchStage.agentsName = agentName;
+  }
+
+  const insuranceMatchStage = {};
+  if (startDate && endDate) {
+    insuranceMatchStage["vehicles.insurance.insuranceStartDate"] = {
+      $gte: new Date(startDate),
+      $lte: new Date(endDate)
+    };
+  }
+
+  // Get unpaid insurances with aggregation
+  const unpaidPipeline = [
+    ...(Object.keys(matchStage).length > 0 ? [{ $match: matchStage }] : []),
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    {
+      $match: {
+        ...insuranceMatchStage,
+        "vehicles.insurance.remainingDebt": { $gt: 0 },
+        "vehicles.insurance.insuranceStatus": "active"
+      }
+    },
+    {
+      $project: {
+        customer: { $concat: ["$first_name", " ", "$last_name"] },
+        vehiclePlate: "$vehicles.plateNumber",
+        insuranceCompany: "$vehicles.insurance.insuranceCompany",
+        insuranceType: "$vehicles.insurance.insuranceType",
+        insuranceStartDate: "$vehicles.insurance.insuranceStartDate",
+        insuranceEndDate: "$vehicles.insurance.insuranceEndDate",
+        remainingDebt: "$vehicles.insurance.remainingDebt",
+        paidAmount: "$vehicles.insurance.paidAmount",
+        totalAmount: "$vehicles.insurance.insuranceAmount"
+      }
     }
+  ];
 
-    // URL encode to prevent injection
-    const sanitizedPlateNumber = encodeURIComponent(trimmedPlateNumber);
+  // Get outstanding checks with aggregation
+  const checksPipeline = [
+    ...(Object.keys(matchStage).length > 0 ? [{ $match: matchStage }] : []),
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    ...(Object.keys(insuranceMatchStage).length > 0 ? [{ $match: insuranceMatchStage }] : []),
+    { $unwind: "$vehicles.insurance.checkDetails" },
+    {
+      $match: {
+        "vehicles.insurance.checkDetails.isReturned": false,
+        "vehicles.insurance.checkDetails.checkDueDate": { $lte: new Date() }
+      }
+    },
+    {
+      $project: {
+        customer: { $concat: ["$first_name", " ", "$last_name"] },
+        vehiclePlate: "$vehicles.plateNumber",
+        insuranceCompany: "$vehicles.insurance.insuranceCompany",
+        insuranceType: "$vehicles.insurance.insuranceType",
+        checkNumber: "$vehicles.insurance.checkDetails.checkNumber",
+        checkAmount: "$vehicles.insurance.checkDetails.checkAmount",
+        dueDate: "$vehicles.insurance.checkDetails.checkDueDate"
+      }
+    }
+  ];
 
-    const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&limit=5&q=${sanitizedPlateNumber}`;
+  const [unpaidInsurances, outstandingChecks, debtTotal] = await Promise.all([
+    insuredModel.aggregate(unpaidPipeline),
+    insuredModel.aggregate(checksPipeline),
+    insuredModel.aggregate([
+      ...unpaidPipeline,
+      {
+        $group: {
+          _id: null,
+          totalDebt: { $sum: "$remainingDebt" }
+        }
+      }
+    ])
+  ]);
 
+  const totalDebt = debtTotal.length > 0 ? debtTotal[0].totalDebt : 0;
+
+  return successResponse(res, {
+    totalDebt,
+    outstandingChecksCount: outstandingChecks.length,
+    unpaidInsurancesCount: unpaidInsurances.length,
+    outstandingChecks,
+    unpaidInsurances,
+  });
+});
+
+export const getVehicleDataFromGovApi = asyncHandler(async (req, res) => {
+  const { plateNumber } = req.params;
+
+  if (!plateNumber) {
+    return badRequestResponse(res, "Plate number is required");
+  }
+
+  // Sanitize and validate plate number
+  const trimmedPlateNumber = String(plateNumber).trim();
+
+  // Validate format: only alphanumeric characters and hyphens, length between 1-20
+  if (!/^[a-zA-Z0-9-]{1,20}$/.test(trimmedPlateNumber)) {
+    return badRequestResponse(res, "Invalid plate number format. Only alphanumeric characters and hyphens are allowed.");
+  }
+
+  // URL encode to prevent injection
+  const sanitizedPlateNumber = encodeURIComponent(trimmedPlateNumber);
+
+  const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&limit=5&q=${sanitizedPlateNumber}`;
+
+  try {
     const response = await axios.get(apiUrl, {
       timeout: 10000, // 10 second timeout
       headers: {
@@ -2073,18 +1828,14 @@ export const getVehicleDataFromGovApi = async (req, res, next) => {
       const records = response.data.result.records;
 
       if (records.length === 0) {
-        return res.status(404).json({
-          message: "No vehicle data found for this plate number",
-          plateNumber: trimmedPlateNumber,
-        });
+        return notFoundResponse(res, "Vehicle data for this plate number");
       }
 
-      return res.status(200).json({
-        message: "Vehicle data retrieved successfully",
+      return successResponse(res, {
         plateNumber: trimmedPlateNumber,
         count: records.length,
         data: records,
-      });
+      }, "Vehicle data retrieved successfully");
     } else {
       return res.status(500).json({
         message: "Failed to retrieve data from government API",
@@ -2107,32 +1858,31 @@ export const getVehicleDataFromGovApi = async (req, res, next) => {
       });
     }
 
-    next(error);
+    throw error;
   }
-};
+});
 
 /**
  * Dashboard Statistics Endpoint
  * Returns all key metrics for the dashboard in a single request
  */
-export const getDashboardStatistics = async (req, res, next) => {
-  try {
-    // Run all aggregations in parallel for performance
-    const [
-      totalCustomers,
-      totalVehicles,
-      activeInsurances,
-      expiredInsurances,
-      totalAgents,
-      totalSystemUsers,
-      insurancePayments,
-      totalExpenses,
-      totalRevenue,
-      totalCheques,
-      returnedCheques,
-      totalAccidents,
-      activeAccidents
-    ] = await Promise.all([
+export const getDashboardStatistics = asyncHandler(async (req, res) => {
+  // Run all aggregations in parallel for performance
+  const [
+    totalCustomers,
+    totalVehicles,
+    activeInsurances,
+    expiredInsurances,
+    totalAgents,
+    totalSystemUsers,
+    insurancePayments,
+    totalExpenses,
+    totalRevenue,
+    totalCheques,
+    returnedCheques,
+    totalAccidents,
+    activeAccidents
+  ] = await Promise.all([
       // 1. Total Customers
       insuredModel.countDocuments(),
 
@@ -2340,17 +2090,11 @@ export const getDashboardStatistics = async (req, res, next) => {
       }
     };
 
-    return res.status(200).json({
-      message: "Dashboard statistics retrieved successfully",
-      timestamp: new Date().toISOString(),
-      data: dashboardStats
-    });
-
-  } catch (error) {
-    logger.error("Error fetching dashboard statistics:", error);
-    next(error);
-  }
-};
+  return successResponse(res, {
+    timestamp: new Date().toISOString(),
+    data: dashboardStats
+  }, "Dashboard statistics retrieved successfully");
+});
 
 // Export financial overview from separate module
 export { getFinancialOverview } from './financialOverview.js';
@@ -2364,106 +2108,99 @@ export { getFinancialOverview } from './financialOverview.js';
  * @query {number} page - Page number for pagination (optional)
  * @query {number} limit - Number of items per page (optional)
  */
-export const getAllCheques = async (req, res, next) => {
-  try {
-    const { startDate, endDate, status = 'all' } = req.query;
-    const { page, limit, skip } = getPaginationParams(req.query);
+export const listCheques = asyncHandler(async (req, res) => {
+  const { startDate, endDate, status = 'all' } = req.query;
+  const { page, limit, skip } = getPaginationParams(req.query);
 
-    // Build match conditions
-    const matchConditions = {};
+  // Build match conditions
+  const matchConditions = {};
 
-    // Filter by date range
-    if (startDate || endDate) {
-      matchConditions["vehicles.insurance.checkDetails.checkDueDate"] = {};
-      if (startDate) {
-        matchConditions["vehicles.insurance.checkDetails.checkDueDate"].$gte = new Date(startDate);
-      }
-      if (endDate) {
-        matchConditions["vehicles.insurance.checkDetails.checkDueDate"].$lte = new Date(endDate);
-      }
+  // Filter by date range
+  if (startDate || endDate) {
+    matchConditions["vehicles.insurance.checkDetails.checkDueDate"] = {};
+    if (startDate) {
+      matchConditions["vehicles.insurance.checkDetails.checkDueDate"].$gte = new Date(startDate);
     }
-
-    // Filter by status
-    if (status && status !== 'all') {
-      if (status === 'returned') {
-        matchConditions["vehicles.insurance.checkDetails.isReturned"] = true;
-      } else if (status === 'active') {
-        matchConditions["vehicles.insurance.checkDetails.isReturned"] = false;
-      }
+    if (endDate) {
+      matchConditions["vehicles.insurance.checkDetails.checkDueDate"].$lte = new Date(endDate);
     }
-
-    const pipeline = [
-      { $unwind: "$vehicles" },
-      { $unwind: "$vehicles.insurance" },
-      { $unwind: "$vehicles.insurance.checkDetails" },
-      ...(Object.keys(matchConditions).length > 0 ? [{ $match: matchConditions }] : []),
-      {
-        $project: {
-          checkId: "$vehicles.insurance.checkDetails._id",
-          checkNumber: "$vehicles.insurance.checkDetails.checkNumber",
-          checkAmount: "$vehicles.insurance.checkDetails.checkAmount",
-          checkDueDate: "$vehicles.insurance.checkDetails.checkDueDate",
-          isReturned: "$vehicles.insurance.checkDetails.isReturned",
-          checkImage: "$vehicles.insurance.checkDetails.checkImage",
-          customerName: { $concat: ["$first_name", " ", "$last_name"] },
-          customerId: "$_id",
-          customerPhone: "$phone_number",
-          customerIdNumber: "$id_Number",
-          vehicleId: "$vehicles._id",
-          plateNumber: "$vehicles.plateNumber",
-          vehicleModel: "$vehicles.model",
-          insuranceId: "$vehicles.insurance._id",
-          insuranceCompany: "$vehicles.insurance.insuranceCompany",
-          insuranceType: "$vehicles.insurance.insuranceType",
-          insuranceStartDate: "$vehicles.insurance.insuranceStartDate",
-          insuranceEndDate: "$vehicles.insurance.insuranceEndDate",
-          paymentMethod: "$vehicles.insurance.paymentMethod",
-        }
-      },
-      { $sort: { checkDueDate: -1 } }
-    ];
-
-    const [cheques, countResult] = await Promise.all([
-      insuredModel.aggregate([...pipeline, { $skip: skip }, { $limit: limit }]),
-      insuredModel.aggregate([...pipeline, { $count: "total" }])
-    ]);
-
-    const total = countResult.length > 0 ? countResult[0].total : 0;
-
-    // Calculate summary statistics
-    const allCheques = await insuredModel.aggregate([
-      ...pipeline.slice(0, -1) // All except sort
-    ]);
-
-    const summary = {
-      totalCheques: allCheques.length,
-      totalAmount: allCheques.reduce((sum, c) => sum + (c.checkAmount || 0), 0),
-      returnedCount: allCheques.filter(c => c.isReturned).length,
-      returnedAmount: allCheques.filter(c => c.isReturned).reduce((sum, c) => sum + (c.checkAmount || 0), 0),
-      activeCount: allCheques.filter(c => !c.isReturned).length,
-      activeAmount: allCheques.filter(c => !c.isReturned).reduce((sum, c) => sum + (c.checkAmount || 0), 0),
-    };
-
-    const response = buildPaginatedResponse(cheques, total, page, limit);
-
-    return res.status(200).json({
-      message: "Cheques retrieved successfully",
-      timestamp: new Date().toISOString(),
-      filters: {
-        startDate: startDate || null,
-        endDate: endDate || null,
-        status: status || 'all'
-      },
-      summary,
-      ...response,
-      cheques: response.data
-    });
-
-  } catch (error) {
-    logger.error("Error fetching all cheques:", error);
-    next(error);
   }
-};
+
+  // Filter by status
+  if (status && status !== 'all') {
+    if (status === 'returned') {
+      matchConditions["vehicles.insurance.checkDetails.isReturned"] = true;
+    } else if (status === 'active') {
+      matchConditions["vehicles.insurance.checkDetails.isReturned"] = false;
+    }
+  }
+
+  const pipeline = [
+    { $unwind: "$vehicles" },
+    { $unwind: "$vehicles.insurance" },
+    { $unwind: "$vehicles.insurance.checkDetails" },
+    ...(Object.keys(matchConditions).length > 0 ? [{ $match: matchConditions }] : []),
+    {
+      $project: {
+        checkId: "$vehicles.insurance.checkDetails._id",
+        checkNumber: "$vehicles.insurance.checkDetails.checkNumber",
+        checkAmount: "$vehicles.insurance.checkDetails.checkAmount",
+        checkDueDate: "$vehicles.insurance.checkDetails.checkDueDate",
+        isReturned: "$vehicles.insurance.checkDetails.isReturned",
+        checkImage: "$vehicles.insurance.checkDetails.checkImage",
+        customerName: { $concat: ["$first_name", " ", "$last_name"] },
+        customerId: "$_id",
+        customerPhone: "$phone_number",
+        customerIdNumber: "$id_Number",
+        vehicleId: "$vehicles._id",
+        plateNumber: "$vehicles.plateNumber",
+        vehicleModel: "$vehicles.model",
+        insuranceId: "$vehicles.insurance._id",
+        insuranceCompany: "$vehicles.insurance.insuranceCompany",
+        insuranceType: "$vehicles.insurance.insuranceType",
+        insuranceStartDate: "$vehicles.insurance.insuranceStartDate",
+        insuranceEndDate: "$vehicles.insurance.insuranceEndDate",
+        paymentMethod: "$vehicles.insurance.paymentMethod",
+      }
+    },
+    { $sort: { checkDueDate: -1 } }
+  ];
+
+  const [cheques, countResult] = await Promise.all([
+    insuredModel.aggregate([...pipeline, { $skip: skip }, { $limit: limit }]),
+    insuredModel.aggregate([...pipeline, { $count: "total" }])
+  ]);
+
+  const total = countResult.length > 0 ? countResult[0].total : 0;
+
+  // Calculate summary statistics
+  const allCheques = await insuredModel.aggregate([
+    ...pipeline.slice(0, -1) // All except sort
+  ]);
+
+  const summary = {
+    totalCheques: allCheques.length,
+    totalAmount: allCheques.reduce((sum, c) => sum + (c.checkAmount || 0), 0),
+    returnedCount: allCheques.filter(c => c.isReturned).length,
+    returnedAmount: allCheques.filter(c => c.isReturned).reduce((sum, c) => sum + (c.checkAmount || 0), 0),
+    activeCount: allCheques.filter(c => !c.isReturned).length,
+    activeAmount: allCheques.filter(c => !c.isReturned).reduce((sum, c) => sum + (c.checkAmount || 0), 0),
+  };
+
+  const response = buildPaginatedResponse(cheques, total, page, limit);
+
+  return successResponse(res, {
+    timestamp: new Date().toISOString(),
+    filters: {
+      startDate: startDate || null,
+      endDate: endDate || null,
+      status: status || 'all'
+    },
+    summary,
+    ...response,
+    cheques: response.data
+  }, "Cheques retrieved successfully");
+});
 
 /**
  * Get all customers with active vehicle insurance
@@ -2471,22 +2208,21 @@ export const getAllCheques = async (req, res, next) => {
  * Returns customers who have at least one vehicle with active insurance
  * Includes full vehicle list with insurance details
  */
-export const getCustomersWithActiveInsurance = async (req, res, next) => {
-  try {
-    const {
-      page = 1,
-      limit = 50,
-      insuranceCompany,
-      insuranceType,
-      agentName,
-      city,
-      search
-    } = req.query;
+export const getCustomersWithActiveInsurance = asyncHandler(async (req, res) => {
+  const {
+    page = 1,
+    limit = 50,
+    insuranceCompany,
+    insuranceType,
+    agentName,
+    city,
+    search
+  } = req.query;
 
-    const { skip, limit: parsedLimit } = getPaginationParams(page, limit);
+  const { skip, limit: parsedLimit } = getPaginationParams(page, limit);
 
-    // Build aggregation pipeline
-    const pipeline = [];
+  // Build aggregation pipeline
+  const pipeline = [];
 
     // Match stage - filter based on query parameters
     const matchStage = {};
@@ -2613,67 +2349,48 @@ export const getCustomersWithActiveInsurance = async (req, res, next) => {
 
     const response = buildPaginatedResponse(customers, total, page, parsedLimit);
 
-    return res.status(200).json({
-      message: "Customers with active insurance retrieved successfully",
-      timestamp: new Date().toISOString(),
-      filters: {
-        insuranceCompany: insuranceCompany || null,
-        insuranceType: insuranceType || null,
-        agentName: agentName || null,
-        city: city || null,
-        search: search || null
-      },
-      summary,
-      ...response,
-      customers: response.data
-    });
-
-  } catch (error) {
-    logger.error("Error fetching customers with active insurance:", error);
-    next(error);
-  }
-};
+  return successResponse(res, {
+    timestamp: new Date().toISOString(),
+    filters: {
+      insuranceCompany: insuranceCompany || null,
+      insuranceType: insuranceType || null,
+      agentName: agentName || null,
+      city: city || null,
+      search: search || null
+    },
+    summary,
+    ...response,
+    customers: response.data
+  }, "Customers with active insurance retrieved successfully");
+});
 
 // View Insurance Document with Official Settings
-export const viewOfficialInsuranceDocument = async (req, res, next) => {
-  try {
-    const { insuredId, vehicleId, insuranceId } = req.params;
+export const viewOfficialInsuranceDocument = asyncHandler(async (req, res) => {
+  const { insuredId, vehicleId, insuranceId } = req.params;
 
-    // Get active document settings
-    const documentSettings = await DocumentSettings.findOne({ isActive: true });
-    if (!documentSettings) {
-      return res.status(404).json({
-        success: false,
-        message: "No active document settings found. Please configure document settings first."
-      });
-    }
+  // Get active document settings
+  const documentSettings = await DocumentSettings.findOne({ isActive: true });
+  if (!documentSettings) {
+    return notFoundResponse(res, "Active document settings. Please configure document settings first");
+  }
 
-    // Get insured customer
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found"
-      });
-    }
+  // Get insured customer
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
+  }
 
-    // Get vehicle
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) {
-      return res.status(404).json({
-        success: false,
-        message: "Vehicle not found"
-      });
-    }
+  // Get vehicle
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) {
+    return notFoundResponse(res, "Vehicle");
+  }
 
-    // Get insurance
-    const insurance = vehicle.insurance.id(insuranceId);
-    if (!insurance) {
-      return res.status(404).json({
-        success: false,
-        message: "Insurance not found"
-      });
-    }
+  // Get insurance
+  const insurance = vehicle.insurance.id(insuranceId);
+  if (!insurance) {
+    return notFoundResponse(res, "Insurance");
+  }
 
     // Format dates
     const formatDate = (date) => {
@@ -2752,67 +2469,45 @@ export const viewOfficialInsuranceDocument = async (req, res, next) => {
       }
     };
 
-    res.status(200).json({
-      success: true,
-      message: "Official insurance document retrieved successfully",
-      data: officialDocument
-    });
-
-  } catch (error) {
-    logger.error("Error generating official insurance document:", error);
-    next(error);
-  }
-};
+  return successResponse(res, {
+    success: true,
+    data: officialDocument
+  }, "Official insurance document retrieved successfully");
+});
 
 // View Payment Receipt with Official Settings
-export const viewOfficialPaymentReceipt = async (req, res, next) => {
-  try {
-    const { insuredId, vehicleId, insuranceId, paymentId } = req.params;
+export const viewOfficialPaymentReceipt = asyncHandler(async (req, res) => {
+  const { insuredId, vehicleId, insuranceId, paymentId } = req.params;
 
-    // Get active document settings
-    const documentSettings = await DocumentSettings.findOne({ isActive: true });
-    if (!documentSettings) {
-      return res.status(404).json({
-        success: false,
-        message: "No active document settings found. Please configure document settings first."
-      });
-    }
+  // Get active document settings
+  const documentSettings = await DocumentSettings.findOne({ isActive: true });
+  if (!documentSettings) {
+    return notFoundResponse(res, "Active document settings. Please configure document settings first");
+  }
 
-    // Get insured customer
-    const insured = await insuredModel.findById(insuredId);
-    if (!insured) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found"
-      });
-    }
+  // Get insured customer
+  const insured = await insuredModel.findById(insuredId);
+  if (!insured) {
+    return notFoundResponse(res, "Customer");
+  }
 
-    // Get vehicle
-    const vehicle = insured.vehicles.id(vehicleId);
-    if (!vehicle) {
-      return res.status(404).json({
-        success: false,
-        message: "Vehicle not found"
-      });
-    }
+  // Get vehicle
+  const vehicle = insured.vehicles.id(vehicleId);
+  if (!vehicle) {
+    return notFoundResponse(res, "Vehicle");
+  }
 
-    // Get insurance
-    const insurance = vehicle.insurance.id(insuranceId);
-    if (!insurance) {
-      return res.status(404).json({
-        success: false,
-        message: "Insurance not found"
-      });
-    }
+  // Get insurance
+  const insurance = vehicle.insurance.id(insuranceId);
+  if (!insurance) {
+    return notFoundResponse(res, "Insurance");
+  }
 
-    // Get payment
-    const payment = insurance.payments.id(paymentId);
-    if (!payment) {
-      return res.status(404).json({
-        success: false,
-        message: "Payment not found"
-      });
-    }
+  // Get payment
+  const payment = insurance.payments.id(paymentId);
+  if (!payment) {
+    return notFoundResponse(res, "Payment");
+  }
 
     // Format dates
     const formatDate = (date) => {
@@ -2916,7 +2611,7 @@ export const viewOfficialPaymentReceipt = async (req, res, next) => {
  * Add payment to existing insurance
  * POST /api/v1/insured/addPayment/:insuredId/:vehicleId/:insuranceId
  */
-export const addPaymentToInsurance = async (req, res, next) => {
+export const createPayment = async (req, res, next) => {
   try {
     const { insuredId, vehicleId, insuranceId } = req.params;
     const {
@@ -3122,7 +2817,7 @@ export const addPaymentToInsurance = async (req, res, next) => {
  * GET /api/v1/insured/payments/all
  * Query params: customerId, paymentMethod, startDate, endDate, page, limit
  */
-export const getAllPayments = async (req, res, next) => {
+export const listPayments = async (req, res, next) => {
   try {
     const {
       customerId,
@@ -3601,7 +3296,7 @@ export const getDueItems = async (req, res, next) => {
  * GET /api/v1/insured/filtered-list
  * Query params: startDate, endDate, agentName, agentId, page, limit, sortBy
  */
-export const getFilteredInsuredList = async (req, res, next) => {
+export const listFiltered = async (req, res, next) => {
   try {
     const { startDate, endDate, agentName, agentId } = req.query;
     const { page, limit, skip } = getPaginationParams(req.query);

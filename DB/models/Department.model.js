@@ -42,10 +42,10 @@ const departmentSchema = new Schema(
           "updateStatus", "assignAccident", "addComment", "getComments",
 
           // Notification permissions
-          "createNotification", "getNotifications", "markAsRead", "Deletenotification",
+          "createNotification", "getNotifications", "markAsRead", "deleteNotification",
 
           // Insured (Customer) permissions
-          "addInsured", "deleteInsured", "updateInsured", "allInsured", "findbyidInsured", "searchCustomer",
+          "addInsured", "deleteInsured", "updateInsured", "allInsured", "findInsuredById", "searchCustomer",
 
           // Vehicle permissions
           "addcar", "removeCar", "showVehicles", "updateCar",
@@ -57,13 +57,13 @@ const departmentSchema = new Schema(
           "addAgents", "deleteAgents", "updateAgents", "allAgents",
 
           // Insurance Company permissions
-          "addCompany", "deleteCompany", "upateCompany", "allCompany",
+          "addCompany", "deleteCompany", "updateCompany", "allCompany",
 
           // Department permissions
           "addDepartment", "deleteDepartment", "updateDepartment", "allDepartments", "DepartmentById",
 
           // User/Employee permissions
-          "addHeadOfDepartmentToDepartmen", "deleteHeadOfDepartmentToDepartmen", "getHeadOfDepartment",
+          "addHeadOfDepartmentToDepartment", "deleteHeadOfDepartmentToDepartment", "getHeadOfDepartment",
           "addEmployee", "deleteEmployee", "updateEmployee", "allEmployee",
 
           // Document Settings permissions
